@@ -1,0 +1,54 @@
+from pydantic_settings import BaseSettings
+
+class Settings(BaseSettings):
+    model_config = {
+        "extra": "ignore",
+        "env_file": ".env",
+        "env_file_encoding": "utf-8"
+    }
+    APP_NAME: str = "SPRIDS Agent Platform"
+    APP_VERSION: str = "0.1.0"
+    DEBUG: bool = True
+    LOG_LEVEL: str = "INFO"          
+    LOG_DIR: str = "logs"             
+    # 已有，⽇志级别
+    # ⽇志⽬录（相对于 backend/）
+    LOG_MAX_BYTES: int = 10 * 1024 * 1024  # 单⽂件最⼤ 10MB
+    LOG_BACKUP_COUNT: int = 5         
+    # 保留 5 份历史⽇志
+    DB_HOST: str = "localhost"
+    DB_PORT: int = 5432
+    DB_NAME: str = "SPRIDS_agent"
+    DB_USER: str = "admin"
+    DB_PASSWORD: str = "Lty120712!"
+
+    @property
+    def DATABASE_URL(self) -> str:
+        return f"postgresql://{self.DB_USER}:{self.DB_PASSWORD}@{self.DB_HOST}:{self.DB_PORT}/{self.DB_NAME}"
+
+    REDIS_HOST: str = "localhost"
+    REDIS_PORT: int = 6379
+
+    @property
+    def REDIS_URL(self) -> str:
+        return f"redis://{self.REDIS_HOST}:{self.REDIS_PORT}/0"
+
+    MINIO_ENDPOINT: str = "localhost:9000"
+    MINIO_ACCESS_KEY: str = "minioadmin"
+    MINIO_SECRET_KEY: str = "minioadmin"
+    MINIO_BUCKET: str = "SPRIDS-agent-images"
+    MINIO_SECURE: bool = False
+
+    JWT_SECRET_KEY: str = "your-super-secret-key-change-in-production"
+    JWT_ALGORITHM: str = "HS256"
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
+
+    ALLOWED_ORIGINS: str = (
+        "http://localhost:3000,http://localhost:5173,http://localhost:8080"
+    )
+
+    @property
+    def cors_origins_list(self) -> list:
+        return [origin.strip() for origin in self.ALLOWED_ORIGINS.split(",")]
+
+settings = Settings()
