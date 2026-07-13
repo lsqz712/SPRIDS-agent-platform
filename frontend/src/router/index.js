@@ -73,10 +73,10 @@ const router = createRouter({
 router.beforeEach((to, from, next) => {
 // 设置⻚⾯标题
   document.title = to.meta.title
-    ? `${to.meta.title} - RSOD Agent Platform`
-    : 'RSOD Agent Platform'
+    ? `${to.meta.title} - SPRIDS Agent Platform`
+    : 'SPRIDS Agent Platform'
 // 检查是否需要认证
-  const token = localStorage.getItem('rsod_token')
+  const token = localStorage.getItem('SPRIDS_token')
   const requiresAuth = to.matched.some((record) => record.meta.requiresAuth !== false)
   if (requiresAuth && !token) {
 // 需要登录但未登录，跳转到登录⻚

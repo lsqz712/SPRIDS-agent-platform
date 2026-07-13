@@ -3,7 +3,7 @@
     <!-- 左侧：Logo + 平台名称 -->
     <div class="header-left">
       <div class="header-logo">R</div>
-      <span class="header-title">RSOD Agent Platform</span>
+      <span class="header-title">SPRIDS Agent Platform</span>
     </div>
     <!-- 右侧：⽤户信息 + 退出按钮 -->
     <div class="header-right">

@@ -1,5 +1,5 @@
 from pydantic_settings import BaseSettings
-
+from pydantic import Field  
 class Settings(BaseSettings):
     model_config = {
         "extra": "ignore",
@@ -19,8 +19,9 @@ class Settings(BaseSettings):
     DB_HOST: str = "localhost"
     DB_PORT: int = 5432
     DB_NAME: str = "SPRIDS_agent"
-    DB_USER: str = "admin"
-    DB_PASSWORD: str = "Lty120712!"
+    DB_USER: str = Field(..., description="数据库用户名")          # 无默认值，必须从 .env 读取
+    DB_PASSWORD: str = Field(..., description="数据库密码")        # 无默认值，必须从 .env 读取
+
 
     @property
     def DATABASE_URL(self) -> str:
@@ -39,7 +40,7 @@ class Settings(BaseSettings):
     MINIO_BUCKET: str = "SPRIDS-agent-images"
     MINIO_SECURE: bool = False
 
-    JWT_SECRET_KEY: str = "your-super-secret-key-change-in-production"
+    JWT_SECRET_KEY: str = Field(..., description="JWT 加密密钥")   # 无默认值，必须从 .env 读取
     JWT_ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
 
@@ -50,5 +51,23 @@ class Settings(BaseSettings):
     @property
     def cors_origins_list(self) -> list:
         return [origin.strip() for origin in self.ALLOWED_ORIGINS.split(",")]
+
+    LLM_API_KEY: str = ""
+    LLM_BASE_URL: str = "https://api.openai.com/v1"
+    LLM_MODEL_NAME: str = "gpt-4o-mini"
+    LLM_TEMPERATURE: float = 0.1
+    LLM_MAX_TOKENS: int = 4096
+    LLM_TIMEOUT: int = 60
+
+
+    QWEN_API_KEY: str = Field(..., description="通义千问 API Key") # 无默认值，必须从 .env 读取
+    QWEN_BASE_URL: str = "https://dashscope.aliyuncs.com/compatible-mode/v1"
+    QWEN_MODEL: str = "qwen-plus"
+
+    OLLAMA_BASE_URL: str = "http://localhost:11434"
+    OLLAMA_MODEL_NAME: str = "llama3.2:3b"
+
+    AGENT_TOOL_ENABLED: bool = True
+    AGENT_MAX_HISTORY_LENGTH: int = 20
 
 settings = Settings()

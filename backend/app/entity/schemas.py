@@ -245,6 +245,18 @@ class ModelVersionResponse(BaseModel):
     is_default: bool
     created_at: datetime
     model_config = {"from_attributes": True, "protected_namespaces": ()}
+class ModelVersionCreate(BaseModel):
+    """⼿动上传模型版本"""
+    scene_id: int
+    version: str = Field(..., description="版本号")
+    model_name: str = Field(..., description="模型名称")
+    model_type: str = Field(default="yolov11n", description="模型类型")
+    model_path: str = Field(..., description="模型文件相对路径")
+    is_default: bool = Field(default=False, description="是否设为默认模型")
+    description: Optional[str] = None
+# ══════════════════════════════════════════════════════════════
+# 四、智能体对话
+# ══════════════════════════════════════════════════════════════
 class ChatSessionCreate(BaseModel):
     """创建对话会话"""
     title: Optional[str] = None
@@ -253,16 +265,6 @@ class ChatSessionResponse(BaseModel):
     id: int
     session_uuid: str
     title: Optional[str] = None
-class ModelVersionCreate(BaseModel):
-    """⼿动上传模型版本"""
-    scene_id: int
-    version: str = Field(..., description="版本号")
-    model_name: str = Field(..., description="模型名称")
-    model_type: str = Field(default="yolov11n", description="模型类型")
-    description: Optional[str] = None
-# ══════════════════════════════════════════════════════════════
-# 四、智能体对话
-# ══════════════════════════════════════════════════════════════
     status: str
     message_count: int
     last_message_at: Optional[datetime] = None
