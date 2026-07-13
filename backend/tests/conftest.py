@@ -84,3 +84,31 @@ def db_session():
     finally:
         session.rollback()
         session.close()
+
+@pytest.fixture
+def auth_headers(client):
+    """
+    提供已认证的请求头（注册 + 登录后返回 Bearer Token）
+    ⽤法：
+    def test_xxx(client, auth_headers):
+        response = client.get("/api/xxx", headers=auth_headers)
+    """
+    # 注册测试用户
+    client.post(
+        "/api/auth/register",
+        json={
+            "username": "test_auth_user",
+            "email": "test_auth@example.com",
+            "password": "123456",
+        },
+    )
+    # 登录获取 Token
+    login_resp = client.post(
+        "/api/auth/login",
+        json={
+            "username": "test_auth_user",
+            "password": "123456",
+        },
+    )
+    token = login_resp.json()["access_token"]
+    return {"Authorization": f"Bearer {token}"}
