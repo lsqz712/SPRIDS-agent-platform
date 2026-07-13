@@ -1,12 +1,10 @@
 from fastapi import FastAPI
 from contextlib import asynccontextmanager
-from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.config.settings import settings
-from app.api.auth import router as auth_router
+from app.api import register_routers
 from app.core.exceptions import register_exception_handlers
 from app.middleware.request_logger import RequestLogMiddleware
-from app.api.health import router as health_router
 
 def init_minio():
     """初始化 MinIO 存储桶"""
@@ -34,6 +32,7 @@ app = FastAPI(
     redoc_url="/redoc",
     lifespan=lifespan,
 )
+register_routers(app)
 register_exception_handlers(app)
 # ── CORS 中间件配置 ──────────────────────────────────
 # 允许前端跨域请求后端 API
@@ -46,7 +45,6 @@ app.add_middleware(
 )
 app.add_middleware(RequestLogMiddleware)
 # ── 注册路由 ─────────────────────────────────────────
-app.include_router(auth_router)
 @app.get("/")
 def root():
     return {
@@ -55,7 +53,7 @@ def root():
         "docs": "/docs",
         "redoc": "/redoc",
     }
-app.include_router(health_router)
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
