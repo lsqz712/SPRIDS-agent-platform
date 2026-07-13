@@ -119,6 +119,24 @@ class RolePermission(Base):
 # ══════════════════════════════════════════════════════════════
 # 二、检测业务（适配 SMT PCB 产线）
 # ══════════════════════════════════════════════════════════════
+
+class PCBBatch(Base):
+    """PCB批次信息表 — SMT产线核心业务实体"""
+    __tablename__ = "pcb_batches"
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    batch_no = Column(String(100), unique=True, nullable=False, index=True, comment="批次号")
+    pcb_type = Column(String(100), nullable=False, comment="PCB型号")
+    production_line = Column(String(50), nullable=False, comment="产线编号")
+    total_count = Column(Integer, nullable=False, comment="总数量")
+    inspected_count = Column(Integer, default=0, comment="已检测数量")
+    pass_count = Column(Integer, default=0, comment="良品数量")
+    fail_count = Column(Integer, default=0, comment="不良品数量")
+    pass_rate = Column(Float, default=0, comment="良品率")
+    status = Column(String(20), default="in_progress", comment="状态：pending/in_progress/completed")
+    created_by = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    created_at = Column(DateTime, default=datetime.now)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+
 class DetectionScene(Base):
     """检测场景配置表（支持软删除）"""
     __tablename__ = "detection_scenes"
@@ -214,12 +232,24 @@ class DetectionResult(Base):
     reviewer_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True, comment="复判人")
     reviewed_at = Column(DateTime, nullable=True, comment="复判时间")
     
-    created_at = Column(DateTime, default=datetime.now)
+    created_at = Column(DateTime, default=datetime.now) 
 
     task = relationship("DetectionTask", back_populates="results")
     reviewer = relationship("User", foreign_keys=[reviewer_id])
 
     defect_type_id = Column(Integer, ForeignKey("defect_types.id", ondelete="SET NULL"), nullable=True, index=True, comment="关联缺陷类型")
+
+class DefectType(Base):
+    """缺陷类型字典表 — 标准化管理PCB缺陷类型"""
+    __tablename__ = "defect_types"
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    code = Column(String(50), unique=True, nullable=False, comment="缺陷编码")
+    name = Column(String(100), nullable=False, comment="缺陷名称")
+    name_cn = Column(String(100), nullable=False, comment="中文名称")
+    severity = Column(Enum(DefectSeverity), default=DefectSeverity.MAJOR, comment="默认严重程度")
+    description = Column(String(500), nullable=True, comment="缺陷描述")
+    is_active = Column(Boolean, default=True)
+
 # ══════════════════════════════════════════════════════════════
 # 三、模型与数据集管理（MLOps）
 # ══════════════════════════════════════════════════════════════
@@ -422,30 +452,3 @@ class OperationLog(Base):
 
     user = relationship("User", back_populates="operation_logs")
 
-class PCBBatch(Base):
-    """PCB批次信息表 — SMT产线核心业务实体"""
-    __tablename__ = "pcb_batches"
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    batch_no = Column(String(100), unique=True, nullable=False, index=True, comment="批次号")
-    pcb_type = Column(String(100), nullable=False, comment="PCB型号")
-    production_line = Column(String(50), nullable=False, comment="产线编号")
-    total_count = Column(Integer, nullable=False, comment="总数量")
-    inspected_count = Column(Integer, default=0, comment="已检测数量")
-    pass_count = Column(Integer, default=0, comment="良品数量")
-    fail_count = Column(Integer, default=0, comment="不良品数量")
-    pass_rate = Column(Float, default=0, comment="良品率")
-    status = Column(String(20), default="in_progress", comment="状态：pending/in_progress/completed")
-    created_by = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
-    created_at = Column(DateTime, default=datetime.now)
-    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
-
-class DefectType(Base):
-    """缺陷类型字典表 — 标准化管理PCB缺陷类型"""
-    __tablename__ = "defect_types"
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    code = Column(String(50), unique=True, nullable=False, comment="缺陷编码")
-    name = Column(String(100), nullable=False, comment="缺陷名称")
-    name_cn = Column(String(100), nullable=False, comment="中文名称")
-    severity = Column(Enum(DefectSeverity), default=DefectSeverity.MAJOR, comment="默认严重程度")
-    description = Column(String(500), nullable=True, comment="缺陷描述")
-    is_active = Column(Boolean, default=True)
