@@ -2,7 +2,7 @@
   <aside class="app-sidebar" :class="{ 'app-sidebar--feixun': feixunTheme }">
     <div class="app-sidebar-brand">
       <img src="/logo.webp" alt="logo" class="app-sidebar-logo" />
-      <span class="app-sidebar-title">Phrolova Agent Platform</span>
+      <span class="app-sidebar-title">Phrolova SPRIDS Agent Platform</span>
     </div>
 
     <nav class="app-sidebar-nav">
@@ -122,6 +122,9 @@ import {
   Clock,
   DataAnalysis,
   MagicStick,
+  Document,
+  Box,
+  CollectionTag,
 } from '@element-plus/icons-vue'
 import PhroUserAvatar from '@/components/common/PhroUserAvatar.vue'
 import { useUserStore } from '@/stores/user'
@@ -151,6 +154,9 @@ const navMenuItems = [
   { path: '/detection', title: '检测工作台', icon: Camera },
   { path: '/training', title: '模型训练', icon: Cpu },
   { path: '/history', title: '历史记录', icon: Clock },
+  { path: '/tasks', title: '任务管理', icon: Document },
+  { path: '/batches', title: '批次管理', icon: Box },
+  { path: '/defect-types', title: '缺陷类型', icon: CollectionTag },
   { path: '/dashboard', title: '数据看板', icon: DataAnalysis },
 ]
 

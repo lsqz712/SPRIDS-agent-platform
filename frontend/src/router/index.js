@@ -56,6 +56,24 @@ const routes = [
         meta: { title: '数据看板', icon: 'DataAnalysis' },
       },
       {
+        path: 'tasks',
+        name: 'Tasks',
+        component: () => import('@/views/TasksPage.vue'),
+        meta: { title: '任务管理', icon: 'Document' },
+      },
+      {
+        path: 'batches',
+        name: 'Batches',
+        component: () => import('@/views/BatchesPage.vue'),
+        meta: { title: '批次管理', icon: 'Package' },
+      },
+      {
+        path: 'defect-types',
+        name: 'DefectTypes',
+        component: () => import('@/views/DefectTypesPage.vue'),
+        meta: { title: '缺陷类型', icon: 'Tags' },
+      },
+      {
         path: 'profile',
         name: 'Profile',
         component: () => import('@/views/ProfilePage.vue'),
@@ -76,8 +94,8 @@ const router = createRouter({
 
 router.beforeEach((to, from, next) => {
   document.title = to.meta.title
-    ? `${to.meta.title} - Phrolova Agent Platform`
-    : 'Phrolova Agent Platform'
+    ? `${to.meta.title} - Phrolova SPRIDS Agent Platform`
+    : 'Phrolova SPRIDS Agent Platform'
 
   const token = localStorage.getItem('rsod_token')
   const requiresAuth = to.matched.some(

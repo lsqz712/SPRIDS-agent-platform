@@ -61,6 +61,7 @@ import PhroPageShell from '@/components/layout/PhroPageShell.vue'
 import { PCB_SCENE, DEFECT_COLORS } from '@/constants/pcbDefects'
 import { mockGetStatistics, withApiFallback } from '@/services/spridsMock'
 import { getStatisticsApi } from '@/api/history'
+import { getOverviewStatisticsApi, getDailyTrendApi, getDefectDistributionApi, getSceneDistributionApi } from '@/api/statistics'
 
 echarts.use([
   PieChart,
@@ -193,10 +194,31 @@ function onResize() {
 }
 
 async function loadStats() {
-  stats.value = await withApiFallback(
-    () => getStatisticsApi().then((r) => r?.data || r),
-    () => mockGetStatistics(),
-  )
+  try {
+    const overviewRes = await getOverviewStatisticsApi()
+    const trendRes = await getDailyTrendApi({ days: 7 })
+    const defectDistRes = await getDefectDistributionApi()
+    const sceneDistRes = await getSceneDistributionApi()
+
+    if (overviewRes.code === 200) {
+      stats.value = {
+        ...overviewRes.data,
+        avg_inference_time: overviewRes.data.avg_inference_time_ms,
+        daily_trend: trendRes.code === 200 ? trendRes.data.items.map(item => ({
+          date: item.date,
+          count: item.task_count,
+        })) : [],
+        class_distribution: defectDistRes.code === 200 ? Object.fromEntries(
+          defectDistRes.data.items.map(item => [item.class_name, item.count])
+        ) : {},
+        scene_distribution: sceneDistRes.code === 200 ? Object.fromEntries(
+          sceneDistRes.data.items.map(item => [item.scene_name, item.task_count])
+        ) : {},
+      }
+    }
+  } catch (error) {
+    stats.value = mockGetStatistics()
+  }
   renderCharts()
 }
 
