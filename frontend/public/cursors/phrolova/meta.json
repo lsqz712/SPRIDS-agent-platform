@@ -1,0 +1,87 @@
+{
+  "default": {
+    "file": "default.png",
+    "x": 0,
+    "y": 0
+  },
+  "pointer": {
+    "file": "pointer.png",
+    "x": 4,
+    "y": 0
+  },
+  "text": {
+    "file": "text.png",
+    "x": 4,
+    "y": 9
+  },
+  "grab": {
+    "file": "grab.png",
+    "x": 4,
+    "y": 0
+  },
+  "ns-resize": {
+    "file": "ns-resize.png",
+    "x": 15,
+    "y": 15
+  },
+  "ew-resize": {
+    "file": "ew-resize.png",
+    "x": 15,
+    "y": 15
+  },
+  "nwse-resize": {
+    "file": "nwse-resize.png",
+    "x": 15,
+    "y": 15
+  },
+  "nesw-resize": {
+    "file": "nesw-resize.png",
+    "x": 15,
+    "y": 15
+  },
+  "not-allowed": {
+    "file": "not-allowed.png",
+    "x": 0,
+    "y": 0
+  },
+  "help": {
+    "file": "help.png",
+    "x": 0,
+    "y": 0
+  },
+  "crosshair": {
+    "file": "crosshair.png",
+    "x": 5,
+    "y": 6
+  },
+  "pen": {
+    "file": "pen.png",
+    "x": 0,
+    "y": 0
+  },
+  "wait": {
+    "file": "wait.png",
+    "x": 15,
+    "y": 15
+  },
+  "progress": {
+    "file": "progress.png",
+    "x": 0,
+    "y": 0
+  },
+  "alias": {
+    "file": "alias.png",
+    "x": 4,
+    "y": 0
+  },
+  "copy": {
+    "file": "copy.png",
+    "x": 0,
+    "y": 0
+  },
+  "cell": {
+    "file": "cell.png",
+    "x": 0,
+    "y": 0
+  }
+}

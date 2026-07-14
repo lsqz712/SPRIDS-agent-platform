@@ -3,7 +3,8 @@
 
 接口列表：
   - POST /api/chat/upload    上传图片文件，返回服务端路径
-  - POST /api/chat/stream    SSE 流式对话（核心接口）
+  - POST /api/chat/stream    SSE 流式对话（检测模式）
+  - POST /api/chat/stream/phrolova    SSE 流式对话（弗洛洛风格）
   - POST /api/chat/sessions    创建新会话
   - GET  /api/chat/sessions    获取会话列表
   - GET  /api/chat/sessions/{id}/messages  获取会话消息历史
@@ -13,14 +14,18 @@
 import json
 import os
 import tempfile
+from typing import Optional
 
-from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
+from fastapi import APIRouter, Depends, File, Header, HTTPException, Request, UploadFile
 from fastapi.responses import StreamingResponse
+from jose import JWTError
 from sqlalchemy.orm import Session
 
 from app.agent.detection_agent import detection_agent
 from app.api.auth import get_current_user
+from app.config.settings import settings
 from app.core.logger import get_logger
+from app.core.security import decode_access_token
 from app.database.session import get_db
 from app.entity.db_models import User
 from app.entity.schemas import (
@@ -28,6 +33,8 @@ from app.entity.schemas import (
     ChatSessionCreate, ChatHistoryResponse,
 )
 from app.agent.core import AgentCore
+from app.services.chat_service import stream_chat
+from app.services.user_service import user_service
 
 logger = get_logger(__name__)
 
@@ -35,6 +42,37 @@ router = APIRouter(prefix="/api/chat", tags=["智能对话"])
 
 UPLOAD_DIR = os.path.join(tempfile.gettempdir(), "rsod_uploads")
 os.makedirs(UPLOAD_DIR, exist_ok=True)
+
+
+class ChatUser:
+    def __init__(self, user_id: int, username: str):
+        self.id = user_id
+        self.username = username
+
+
+async def get_chat_user(
+    authorization: Optional[str] = Header(None),
+    db: Session = Depends(get_db),
+) -> ChatUser:
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="未登录，请先登录或使用预览模式")
+
+    token = authorization.removeprefix("Bearer ").strip()
+
+    if token == "dev-preview" and settings.DEBUG:
+        return ChatUser(user_id=0, username="漂泊者")
+
+    try:
+        payload = decode_access_token(token)
+        user_id_str = payload.get("sub")
+        if user_id_str is None:
+            raise HTTPException(status_code=401, detail="无效的认证凭据")
+        user = user_service.get_user_by_id(db, int(user_id_str))
+        if not user:
+            raise HTTPException(status_code=401, detail="用户不存在")
+        return ChatUser(user_id=user.id, username=user.username)
+    except (JWTError, ValueError) as exc:
+        raise HTTPException(status_code=401, detail="无效的认证凭据") from exc
 
 
 @router.post("/upload", summary="上传图片文件")
@@ -100,6 +138,54 @@ async def chat_stream(
             "Cache-Control": "no-cache",
             "Connection": "keep-alive",
             "X-Accel-Buffering": "no",
+        },
+    )
+
+
+@router.post("/stream/phrolova")
+async def chat_stream_phrolova(
+    request: Request,
+    user: ChatUser = Depends(get_chat_user),
+):
+    body = await request.json()
+    message = body.get("message", "")
+    history = body.get("history", [])
+
+    if not message:
+        raise HTTPException(status_code=400, detail="消息内容不能为空")
+
+    logger.info("用户 %s 发起弗洛洛对话: message=%s", user.username, message[:50])
+
+    async def event_generator():
+        try:
+            async for chunk in stream_chat(
+                user_message=message,
+                history=history,
+                username=user.username,
+            ):
+                payload = json.dumps({"content": chunk}, ensure_ascii=False)
+                yield f"data: {payload}\n\n"
+            yield "data: [DONE]\n\n"
+        except Exception as exc:
+            logger.exception("phrolova chat stream failed")
+            error_message = str(exc)
+            if "Connection error" in error_message or "ConnectError" in error_message:
+                error_message = (
+                    "无法连接 LLM 服务。请检查 backend/.env 中的 API Key 与 Base URL，"
+                    "或改用 LLM_PROVIDER=qwen / USE_LOCAL_LLM=true"
+                )
+            payload = json.dumps({"error": error_message}, ensure_ascii=False)
+            yield f"data: {payload}\n\n"
+            yield "data: [DONE]\n\n"
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+            "X-Chat-Persona": "phrolova-v2",
         },
     )
 

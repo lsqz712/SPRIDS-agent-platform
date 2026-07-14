@@ -1,31 +1,52 @@
 """
 认证相关 API 路由
-- POST /api/auth/register  ⽤户注册
-- POST /api/auth/login     ⽤户登录 
-- GET  /api/auth/me        获取当前⽤户信息
+- POST /api/auth/register  用户注册
+- POST /api/auth/login     用户登录 
+- GET  /api/auth/me        获取当前用户信息
 """
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from fastapi.security import OAuth2PasswordBearer
 from jose import JWTError
 from sqlalchemy.orm import Session
 from app.core.security import decode_access_token
 from app.database.session import get_db
-from app.entity.schemas import TokenResponse, UserLogin, UserRegister, UserResponse
+from app.entity.schemas import (
+    ChangePassword,
+    TokenResponse,
+    UserLogin,
+    UserRegister,
+    UserResponse,
+    UserUpdate,
+)
 from app.services.user_service import user_service
+
 router = APIRouter(prefix="/api/auth", tags=["认证"])
-# OAuth2 密码模式，⽤于从请求 Header 中提取 Token
+
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")
+
+
+def serialize_user(user, roles: list[str]) -> dict:
+    return {
+        "id": user.id,
+        "username": user.username,
+        "email": user.email,
+        "phone": user.phone,
+        "avatar": user.avatar,
+        "is_active": user.is_active,
+        "is_superuser": user.is_superuser,
+        "roles": roles,
+        "last_login_at": user.last_login_at,
+        "created_at": user.created_at,
+    }
+
+
 async def get_current_user(
     token: str = Depends(oauth2_scheme),
     db: Session = Depends(get_db),
 ):
-    """
-    从 JWT Token 中解析当前⽤户
-    在需要认证的路由中通过 Depends(get_current_user) 使⽤
-    """
     credentials_exception = HTTPException(
         status_code=401,
-        detail="⽆效的认证凭据",
+        detail="无效的认证凭据",
         headers={"WWW-Authenticate": "Bearer"},
     )
     try:
@@ -36,39 +57,41 @@ async def get_current_user(
         user_id = int(user_id_str)
     except (JWTError, ValueError):
         raise credentials_exception
-    user = user_service.get_user_by_id(db, user_id)
-    return user
+
+    return user_service.get_user_by_id(db, user_id)
+
+
 @router.post("/register", response_model=UserResponse, status_code=201)
 async def register(request: UserRegister, db: Session = Depends(get_db)):
-    """
-    ⽤户注册
-    - **username**: ⽤户名（3-50 字符）
-    - **email**: 邮箱
-    - **password**: 密码（⾄少 6 位）
-    """
     user = user_service.register(
         db=db,
         username=request.username,
         email=request.email,
         password=request.password,
     )
-    return user
+    return {
+        "id": user.id,
+        "username": user.username,
+        "email": user.email,
+        "phone": user.phone,
+        "avatar": user.avatar,
+        "is_active": user.is_active,
+        "is_superuser": user.is_superuser,
+        "roles": [],
+        "last_login_at": user.last_login_at,
+        "created_at": user.created_at,
+    }
+
+
 @router.post("/login", response_model=TokenResponse)
 async def login(request: UserLogin, db: Session = Depends(get_db)):
-    """
-    ⽤户登录
-    - 返回 JWT access_token
-    - 后续请求在 Header 中携带：Authorization: Bearer <token>
-    """
     user = user_service.login(
         db=db,
         username=request.username,
         password=request.password,
     )
-    
     access_token = user_service.create_access_token_for_user(user)
     roles = user_service.get_user_roles(db, user)
-    
     return {
         "access_token": access_token,
         "token_type": "bearer",
@@ -80,22 +103,49 @@ async def login(request: UserLogin, db: Session = Depends(get_db)):
             "roles": roles,
         },
     }
+
+
 @router.get("/me", response_model=UserResponse)
 async def get_current_user_info(
     current_user=Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """获取当前登录⽤户信息（需要 Token 认证）"""
     roles = user_service.get_user_roles(db, current_user)
-    return {
-        "id": current_user.id,
-        "username": current_user.username,
-        "email": current_user.email,
-        "phone": current_user.phone,
-        "avatar": current_user.avatar,
-        "is_active": current_user.is_active,
-        "is_superuser": current_user.is_superuser,
-        "roles": roles,
-        "last_login_at": current_user.last_login_at,
-        "created_at": current_user.created_at,
-    }
+    return serialize_user(current_user, roles)
+
+
+@router.patch("/me", response_model=UserResponse)
+async def update_current_user_info(
+    request: UserUpdate,
+    current_user=Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    payload = request.model_dump(exclude_unset=True)
+    user = user_service.update_profile(db, current_user, payload)
+    roles = user_service.get_user_roles(db, user)
+    return serialize_user(user, roles)
+
+
+@router.post("/change-password", status_code=204)
+async def change_current_user_password(
+    request: ChangePassword,
+    current_user=Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    user_service.change_password(
+        db,
+        current_user,
+        request.old_password,
+        request.new_password,
+    )
+
+
+@router.post("/me/avatar", response_model=UserResponse)
+async def upload_current_user_avatar(
+    file: UploadFile = File(...),
+    current_user=Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    user = await user_service.upload_avatar(db, current_user, file)
+    roles = user_service.get_user_roles(db, user)
+    return serialize_user(user, roles)

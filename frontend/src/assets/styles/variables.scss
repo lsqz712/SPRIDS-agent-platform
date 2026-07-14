@@ -1,37 +1,76 @@
 // ═══════════════════════════════════════════════════════
-// 全局 SCSS 变量 — 主题⾊、间距、尺⼨
+// 全局 SCSS 变量 — 主题色、间距、尺寸
 // ═══════════════════════════════════════════════════════
-// ── 主题⾊ ──────────────────────────────────────────
-$primary-color: #66ccff;
+
+// ── 字体 ────────────────────────────────────────────
+$font-family-ui: 'Noto Sans SC', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+$font-family-phro: 'Noto Serif SC', 'Noto Sans SC', 'PingFang SC', 'Microsoft YaHei', serif;
+
+// ── 主题色 ──────────────────────────────────────────
+$primary-color: #409eff;
 $success-color: #67c23a;
 $warning-color: #e6a23c;
-$danger-color: #ee0000;
+$danger-color: #f56c6c;
 $info-color: #909399;
-// ── 背景⾊ ──────────────────────────────────────────
+
+// ── 背景色 ──────────────────────────────────────────
 $bg-color: #f5f7fa;
 $bg-color-dark: #1d1e1f;
-$sidebar-bg: #304156;
-$sidebar-text: #bfcbd9;
-$sidebar-active-text: #66ccff;
-// ── ⽂字⾊ ──────────────────────────────────────────
+
+// 弗洛洛 — 酒红 · 金（与飞讯历史对话一致）
+$phro-crimson: #7a1028;
+$phro-rose: #b83048;
+$phro-gold: #c9952e;
+$phro-panel-bg: #f9efec;
+$phro-text-deep: #5a3840;
+$phro-text-mid: #8a5860;
+$phro-border: rgba($phro-rose, 0.42);
+$phro-glass-bg: rgba(32, 6, 14, 0.42);
+$phro-glass-border: rgba(212, 175, 120, 0.28);
+// 子菜单/右键气泡：与侧栏毛玻璃一致
+$phro-submenu-surface: $phro-glass-bg;
+$phro-submenu-border: $phro-glass-border;
+$phro-gap-fill: $phro-glass-bg;
+$phro-module-gap: 10px;
+$phro-radius: 10px;
+$phro-divider-width: 2px;
+$phro-gold-light: #e8b86d;
+$phro-cream: #f5e6c8;
+$phro-cream-muted: #d4bca8;
+$phro-text-warm: #9a7068;
+$phro-btn-bg: $phro-panel-bg;
+$phro-radius-sm: 8px;
+$phro-window-padding: 14px;
+$phro-bubble-in: $phro-submenu-surface;
+$phro-bubble-border: $phro-submenu-border;
+
+$sidebar-bg: $phro-gap-fill;
+$sidebar-text: $phro-text-deep;
+$sidebar-active-text: $phro-text-deep;
+
+// ── 文字色 ──────────────────────────────────────────
 $text-primary: #303133;
 $text-regular: #606266;
 $text-secondary: #909399;
 $text-placeholder: #c0c4cc;
-// ── 布局尺⼨ ────────────────────────────────────────
+
+// ── 布局尺寸 ────────────────────────────────────────
 $header-height: 56px;
 $sidebar-width: 210px;
 $sidebar-collapsed-width: 64px;
+
 // ── 间距 ────────────────────────────────────────────
 $spacing-xs: 4px;
 $spacing-sm: 8px;
 $spacing-md: 16px;
 $spacing-lg: 24px;
 $spacing-xl: 32px;
-// ── 圆⻆ ────────────────────────────────────────────
+
+// ── 圆角 ────────────────────────────────────────────
 $border-radius-sm: 4px;
 $border-radius-md: 8px;
 $border-radius-lg: 12px;
+
 // ── 阴影 ────────────────────────────────────────────
 $shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.08);
 $shadow-md: 0 2px 8px rgba(0, 0, 0, 0.1);

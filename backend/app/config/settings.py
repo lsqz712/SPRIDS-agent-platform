@@ -59,15 +59,24 @@ class Settings(BaseSettings):
     LLM_MAX_TOKENS: int = 4096
     LLM_TIMEOUT: int = 60
 
+    LLM_PROVIDER: str = "qwen"
+    USE_LOCAL_LLM: bool = False
 
-    QWEN_API_KEY: str = Field(..., description="通义千问 API Key") # 无默认值，必须从 .env 读取
+    OPENAI_API_KEY: str = ""
+    OPENAI_MODEL: str = "gpt-4o-mini"
+    OPENAI_BASE_URL: str = "https://api.openai.com/v1"
+
+    QWEN_API_KEY: str = ""
     QWEN_BASE_URL: str = "https://dashscope.aliyuncs.com/compatible-mode/v1"
     QWEN_MODEL: str = "qwen-plus"
 
     OLLAMA_BASE_URL: str = "http://localhost:11434"
     OLLAMA_MODEL_NAME: str = "llama3.2:3b"
+    OLLAMA_MODEL: str = "llama3.2:3b"
 
     AGENT_TOOL_ENABLED: bool = True
     AGENT_MAX_HISTORY_LENGTH: int = 20
+
+    CHAT_PERSONA: str = "phrolova"
 
 settings = Settings()

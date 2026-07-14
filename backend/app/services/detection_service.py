@@ -1,454 +1,252 @@
+﻿"""
+检测任务服务层
+处理单图检测、批量检测、任务 CRUD 及结果管理等业务逻辑
 """
-目标检测服务 — 封装 YOLOv11 推理逻辑
-
-职责：
-  - 单图检测（detect_single）
-  - 批量检测（detect_batch）
-  - ZIP 解压 + 批量检测（detect_zip）
-  - 结果持久化（MinIO 存储标注图 + PostgreSQL 存储检测结果）
-
-架构：
-  DetectionService 是无状态的纯服务，被 Agent Tool 和快捷按钮 API 共同调用。
-  每次检测都会：
-    1. 创建 DetectionTask 记录
-    2. 运行 YOLO 推理
-    3. 上传标注图到 MinIO
-    4. 保存 DetectionResult 记录
-
-使用方式：
-  from app.services.detection_service import detection_service
-
-  result = detection_service.detect_single(image_path, scene_id, user_id)
-"""
-
-import base64
-import os
-import tempfile
-import zipfile
+import uuid
 from datetime import datetime
+from fastapi import HTTPException
+from sqlalchemy.orm import Session, joinedload
+from sqlalchemy import or_
 
-import cv2
-from sqlalchemy.orm import Session
-from ultralytics import YOLO
-
-from app.config.settings import settings
-from app.core.logger import get_logger
-from app.database.session import SessionLocal
-from app.entity.db_models import (
-    DetectionResult,
-    DetectionScene,
-    DetectionTask,
-    ModelVersion,
-)
-from app.storage.minio_client import MinIOClient
-
-logger = get_logger(__name__)
-
-ALLOWED_IMAGE_TYPES = {
-    "image/jpeg",
-    "image/png",
-    "image/bmp",
-    "image/webp",
-    ".jpg",
-    ".jpeg",
-    ".png",
-    ".bmp",
-    ".webp",
-}
+from app.entity.db_models import DetectionTask, DetectionResult, TaskStatus
+from app.entity.schemas import DetectionTaskResponse, DetectionResultResponse
 
 
 class DetectionService:
-    """目标检测服务 — 封装 YOLOv11 推理全流程"""
+    """检测任务服务"""
 
     @staticmethod
-    def _get_default_model_path() -> str:
-        db = SessionLocal()
-        try:
-            default_model = (
-                db.query(ModelVersion).filter(ModelVersion.is_default == True).first()
-            )
-            if default_model and os.path.exists(default_model.model_path):
-                return default_model.model_path
-
-            from app.entity.db_models import TrainingTask
-
-            latest_task = (
-                db.query(TrainingTask)
-                .filter(TrainingTask.status == "completed")
-                .order_by(TrainingTask.completed_at.desc())
-                .first()
-            )
-            if latest_task:
-                weights_path = os.path.join(
-                    os.getcwd(),
-                    getattr(settings, "TRAIN_OUTPUT_DIR", "runs/train"),
-                    f"task_{latest_task.task_uuid}",
-                    "weights",
-                    "best.pt",
-                )
-                if os.path.exists(weights_path):
-                    return weights_path
-        finally:
-            db.close()
-
-        return "yolo11n.pt"
-
-    @staticmethod
-    def _get_model(scene_id: int = None) -> YOLO:
-        model_path = None
-
-        if scene_id:
-            db = SessionLocal()
-            try:
-                default_model = (
-                    db.query(ModelVersion)
-                    .filter(
-                        ModelVersion.scene_id == scene_id,
-                        ModelVersion.is_default == True,
-                    )
-                    .first()
-                )
-                if default_model and os.path.exists(default_model.model_path):
-                    model_path = default_model.model_path
-            finally:
-                db.close()
-
-        if not model_path:
-            model_path = DetectionService._get_default_model_path()
-
-        logger.info("加载检测模型: %s", model_path)
-        return YOLO(model_path)
-
-    @staticmethod
-    def _save_task_and_results(
+    def list_tasks(
         db: Session,
-        user_id: int,
+        page: int = 1,
+        page_size: int = 20,
+        scene_id: int | None = None,
+        status: str | None = None,
+        task_type: str | None = None,
+        user_id: int | None = None,
+        batch_id: int | None = None,
+        keyword: str | None = None,
+    ) -> tuple[list[DetectionTask], int]:
+        """
+        获取检测任务分页列表
+        返回: (任务列表, 总数)
+        """
+        query = db.query(DetectionTask)
+
+        # 筛选条件
+        if scene_id:
+            query = query.filter(DetectionTask.scene_id == scene_id)
+        if status:
+            query = query.filter(DetectionTask.status == status)
+        if task_type:
+            query = query.filter(DetectionTask.task_type == task_type)
+        if user_id:
+            query = query.filter(DetectionTask.user_id == user_id)
+        if batch_id:
+            query = query.filter(DetectionTask.batch_id == batch_id)
+        if keyword:
+            query = query.filter(
+                or_(
+                    DetectionTask.id.cast(str).ilike(f"%{keyword}%"),
+                )
+            )
+
+        # 计算总数
+        total = query.count()
+
+        # 分页
+        query = query.order_by(DetectionTask.created_at.desc())
+        query = query.offset((page - 1) * page_size).limit(page_size)
+
+        tasks = query.all()
+        return tasks, total
+
+    @staticmethod
+    def get_task_by_id(db: Session, task_id: int) -> DetectionTask:
+        """根据 ID 获取任务详情（含检测结果）"""
+        task = (
+            db.query(DetectionTask)
+            .options(joinedload(DetectionTask.results))
+            .options(joinedload(DetectionTask.scene))
+            .filter(DetectionTask.id == task_id)
+            .first()
+        )
+        if not task:
+            raise HTTPException(status_code=404, detail="检测任务不存在")
+        return task
+
+    @staticmethod
+    def create_single_task(
+        db: Session,
         scene_id: int,
-        task_type: str,
-        detections: list,
-        annotated_image: bytes,
-        original_filename: str,
-        inference_time: float,
-        conf: float,
-        iou: float,
-    ) -> dict:
+        user_id: int | None,
+        model_version_id: int | None = None,
+        conf_threshold: float = 0.25,
+        iou_threshold: float = 0.45,
+        batch_id: int | None = None,
+    ) -> DetectionTask:
+        """创建单图检测任务"""
         task = DetectionTask(
             user_id=user_id,
             scene_id=scene_id,
-            task_type=task_type,
-            status="completed",
-            total_images=1,
-            total_objects=len(detections),
-            total_inference_time=inference_time,
-            conf_threshold=conf,
-            iou_threshold=iou,
-            completed_at=datetime.now(),
+            model_version_id=model_version_id,
+            task_type="single",
+            status=TaskStatus.PENDING,
+            conf_threshold=conf_threshold,
+            iou_threshold=iou_threshold,
+            batch_id=batch_id,
         )
         db.add(task)
-        db.flush()
+        db.commit()
+        db.refresh(task)
+        return task
 
-        annotated_image_url = None
-        try:
-            minio_client = MinIOClient()
-            object_name = f"detections/{task.id}/{original_filename}"
-            annotated_image_url = minio_client.upload_bytes(
-                object_name, annotated_image, "image/jpeg"
-            )
-        except Exception as e:
-            logger.warning("MinIO 上传失败（不影响检测结果）: %s", str(e))
+    @staticmethod
+    def create_batch_task(
+        db: Session,
+        scene_id: int,
+        user_id: int | None,
+        model_version_id: int | None = None,
+        conf_threshold: float = 0.25,
+        iou_threshold: float = 0.45,
+        batch_id: int | None = None,
+        image_count: int = 0,
+    ) -> DetectionTask:
+        """创建批量检测任务"""
+        task = DetectionTask(
+            user_id=user_id,
+            scene_id=scene_id,
+            model_version_id=model_version_id,
+            task_type="batch",
+            status=TaskStatus.PENDING,
+            conf_threshold=conf_threshold,
+            iou_threshold=iou_threshold,
+            batch_id=batch_id,
+            total_images=image_count,
+        )
+        db.add(task)
+        db.commit()
+        db.refresh(task)
+        return task
 
-        for det in detections:
+    @staticmethod
+    def update_task_status(
+        db: Session,
+        task_id: int,
+        status: TaskStatus,
+        error_message: str | None = None,
+    ) -> DetectionTask:
+        """更新任务状态"""
+        task = DetectionService.get_task_by_id(db, task_id)
+        task.status = status
+        if status == TaskStatus.COMPLETED:
+            task.completed_at = datetime.now()
+        if error_message:
+            task.error_message = error_message
+        db.commit()
+        db.refresh(task)
+        return task
+
+    @staticmethod
+    def delete_task(db: Session, task_id: int) -> None:
+        """删除检测任务（级联删除关联结果）"""
+        task = DetectionService.get_task_by_id(db, task_id)
+        db.delete(task)
+        db.commit()
+
+    @staticmethod
+    def get_task_results(
+        db: Session,
+        task_id: int,
+        page: int = 1,
+        page_size: int = 50,
+        class_name: str | None = None,
+        review_status: str | None = None,
+        min_confidence: float | None = None,
+    ) -> tuple[list[DetectionResult], int]:
+        """获取任务的检测结果列表"""
+        task = DetectionService.get_task_by_id(db, task_id)
+
+        query = db.query(DetectionResult).filter(DetectionResult.task_id == task_id)
+
+        if class_name:
+            query = query.filter(DetectionResult.class_name == class_name)
+        if review_status:
+            query = query.filter(DetectionResult.review_status == review_status)
+        if min_confidence is not None:
+            query = query.filter(DetectionResult.confidence >= min_confidence)
+
+        total = query.count()
+        query = query.order_by(DetectionResult.confidence.desc())
+        query = query.offset((page - 1) * page_size).limit(page_size)
+
+        results = query.all()
+        return results, total
+
+    @staticmethod
+    def save_result(
+        db: Session,
+        task_id: int,
+        image_path: str,
+        class_name: str,
+        class_name_cn: str | None,
+        class_id: int,
+        confidence: float,
+        bbox: list,
+        annotated_image_url: str | None = None,
+        inference_time: float | None = None,
+        image_width: int | None = None,
+        image_height: int | None = None,
+    ) -> DetectionResult:
+        """保存单条检测结果"""
+        result = DetectionResult(
+            task_id=task_id,
+            image_path=image_path,
+            annotated_image_url=annotated_image_url,
+            class_name=class_name,
+            class_name_cn=class_name_cn,
+            class_id=class_id,
+            confidence=confidence,
+            bbox=bbox,
+            inference_time=inference_time,
+            image_width=image_width,
+            image_height=image_height,
+        )
+        db.add(result)
+        db.commit()
+        db.refresh(result)
+        return result
+
+    @staticmethod
+    def save_results_batch(
+        db: Session,
+        task_id: int,
+        results_data: list[dict],
+    ) -> list[DetectionResult]:
+        """批量保存检测结果"""
+        results = []
+        for data in results_data:
             result = DetectionResult(
-                task_id=task.id,
-                image_path=original_filename,
-                annotated_image_url=annotated_image_url,
-                class_name=det["class_name"],
-                class_name_cn=det.get("class_name_cn"),
-                class_id=det["class_id"],
-                confidence=det["confidence"],
-                bbox=det["bbox"],
-                inference_time=inference_time,
+                task_id=task_id,
+                image_path=data["image_path"],
+                annotated_image_url=data.get("annotated_image_url"),
+                class_name=data["class_name"],
+                class_name_cn=data.get("class_name_cn"),
+                class_id=data["class_id"],
+                confidence=data["confidence"],
+                bbox=data["bbox"],
+                inference_time=data.get("inference_time"),
+                image_width=data.get("image_width"),
+                image_height=data.get("image_height"),
             )
             db.add(result)
+            results.append(result)
 
         db.commit()
-        return {"task_id": task.id, "annotated_image_url": annotated_image_url}
-
-    def detect_single(
-        self,
-        image_path: str,
-        conf: float = 0.25,
-        iou: float = 0.45,
-        scene_id: int = None,
-        user_id: int = None,
-    ) -> dict:
-        db = SessionLocal()
-        try:
-            model = self._get_model(scene_id)
-
-            results = model.predict(
-                source=image_path,
-                conf=conf,
-                iou=iou,
-                imgsz=640,
-                device="cpu",
-                save=False,
-                verbose=False,
-            )
-
-            result = results[0]
-            detections = []
-            total_objects = 0
-
-            if result.boxes is not None and len(result.boxes) > 0:
-                for box in result.boxes:
-                    cls_id = int(box.cls[0])
-                    cls_name = model.names.get(cls_id, f"class_{cls_id}")
-                    confidence = float(box.conf[0])
-                    x1, y1, x2, y2 = box.xyxy[0].tolist()
-
-                    detections.append(
-                        {
-                            "class_name": cls_name,
-                            "class_id": cls_id,
-                            "confidence": round(confidence, 4),
-                            "bbox": [
-                                round(x1, 1),
-                                round(y1, 1),
-                                round(x2, 1),
-                                round(y2, 1),
-                            ],
-                        }
-                    )
-                    total_objects += 1
-
-            annotated_img = result.plot()
-            _, buffer = cv2.imencode(
-                ".jpg", annotated_img, [cv2.IMWRITE_JPEG_QUALITY, 85]
-            )
-            annotated_base64 = base64.b64encode(buffer).decode("utf-8")
-
-            class_counts = {}
-            for det in detections:
-                name = det["class_name"]
-                class_counts[name] = class_counts.get(name, 0) + 1
-
-            task_id = None
-            annotated_image_url = None
-            if user_id and scene_id:
-                save_result = self._save_task_and_results(
-                    db=db,
-                    user_id=user_id,
-                    scene_id=scene_id,
-                    task_type="single",
-                    detections=detections,
-                    annotated_image=buffer.tobytes(),
-                    original_filename=os.path.basename(image_path),
-                    inference_time=float(result.speed.get("inference", 0)),
-                    conf=conf,
-                    iou=iou,
-                )
-                task_id = save_result["task_id"]
-                annotated_image_url = save_result.get("annotated_image_url")
-
-            logger.info(
-                "单图检测完成: %s, 检测到 %d 个目标, 耗时 %.2fms",
-                image_path,
-                total_objects,
-                float(result.speed.get("inference", 0)),
-            )
-
-            return {
-                "total_objects": total_objects,
-                "class_counts": class_counts,
-                "detections": detections,
-                "annotated_image_base64": annotated_base64,
-                "annotated_image_url": annotated_image_url,
-                "inference_time": round(float(result.speed.get("inference", 0)), 2),
-                "task_id": task_id,
-            }
-
-        except Exception as e:
-            logger.error("单图检测异常: %s", str(e), exc_info=True)
-            return {"error": f"检测失败: {str(e)}"}
-        finally:
-            db.close()
-
-    def detect_batch(
-        self,
-        image_paths: list[str],
-        conf: float = 0.25,
-        scene_id: int = None,
-        user_id: int = None,
-    ) -> dict:
-        db = SessionLocal()
-        try:
-            model = self._get_model(scene_id)
-
-            if not scene_id:
-                default_scene = db.query(DetectionScene).first()
-                if default_scene:
-                    scene_id = default_scene.id
-                else:
-                    return {"error": "数据库中没有可用的检测场景，请先创建检测场景"}
-
-            task = DetectionTask(
-                user_id=user_id or 0,
-                scene_id=scene_id,
-                task_type="batch",
-                status="processing",
-                total_images=len(image_paths),
-                conf_threshold=conf,
-            )
-            db.add(task)
-            db.flush()
-
-            all_detections = []
-            annotated_images = []
-            total_objects = 0
-            total_inference_time = 0
-            class_counts = {}
-
-            for i, image_path in enumerate(image_paths):
-                results = model.predict(
-                    source=image_path,
-                    conf=conf,
-                    iou=0.45,
-                    imgsz=640,
-                    device="cpu",
-                    save=False,
-                    verbose=False,
-                )
-                result = results[0]
-                inference_time = float(result.speed.get("inference", 0))
-                total_inference_time += inference_time
-
-                annotated_img = result.plot()
-                _, buffer = cv2.imencode(
-                    ".jpg", annotated_img, [cv2.IMWRITE_JPEG_QUALITY, 85]
-                )
-                annotated_images.append({
-                    "image_path": os.path.basename(image_path),
-                    "annotated_image_base64": base64.b64encode(buffer).decode("utf-8"),
-                })
-
-                if result.boxes is not None and len(result.boxes) > 0:
-                    for box in result.boxes:
-                        cls_id = int(box.cls[0])
-                        cls_name = model.names.get(cls_id, f"class_{cls_id}")
-                        confidence = float(box.conf[0])
-                        x1, y1, x2, y2 = box.xyxy[0].tolist()
-
-                        det = {
-                            "image_path": image_path,
-                            "class_name": cls_name,
-                            "class_id": cls_id,
-                            "confidence": round(confidence, 4),
-                            "bbox": [
-                                round(x1, 1),
-                                round(y1, 1),
-                                round(x2, 1),
-                                round(y2, 1),
-                            ],
-                            "inference_time": inference_time,
-                        }
-                        all_detections.append(det)
-                        total_objects += 1
-
-                        class_counts[cls_name] = class_counts.get(cls_name, 0) + 1
-
-                    for det in all_detections:
-                        if det["image_path"] == image_path:
-                            db_result = DetectionResult(
-                                task_id=task.id,
-                                image_path=image_path,
-                                class_name=det["class_name"],
-                                class_id=det["class_id"],
-                                confidence=det["confidence"],
-                                bbox=det["bbox"],
-                                inference_time=inference_time,
-                            )
-                            db.add(db_result)
-
-            task.status = "completed"
-            task.total_objects = total_objects
-            task.total_inference_time = total_inference_time
-            task.completed_at = datetime.now()
-            db.commit()
-
-            logger.info(
-                "批量检测完成: %d 张图, 共 %d 个目标, 总耗时 %.2fms",
-                len(image_paths),
-                total_objects,
-                total_inference_time,
-            )
-
-            return {
-                "task_id": task.id,
-                "total_images": len(image_paths),
-                "total_objects": total_objects,
-                "class_counts": class_counts,
-                "total_inference_time": round(total_inference_time, 2),
-                "detections": all_detections,
-                "annotated_images": annotated_images,
-            }
-
-        except Exception as e:
-            logger.error("批量检测异常: %s", str(e), exc_info=True)
-            return {"error": f"批量检测失败: {str(e)}"}
-        finally:
-            db.close()
-
-    def detect_zip(
-        self,
-        zip_path: str,
-        conf: float = 0.25,
-        scene_id: int = None,
-        user_id: int = None,
-    ) -> dict:
-        temp_dir = None
-        try:
-            temp_dir = tempfile.mkdtemp(prefix="rsod_zip_")
-            logger.info("解压 ZIP 文件: %s → %s", zip_path, temp_dir)
-
-            with zipfile.ZipFile(zip_path, "r") as zf:
-                zf.extractall(temp_dir)
-
-            image_files = []
-            for root, dirs, files in os.walk(temp_dir):
-                for fname in files:
-                    ext = os.path.splitext(fname)[1].lower()
-                    if ext in {".jpg", ".jpeg", ".png", ".bmp", ".webp"}:
-                        image_files.append(os.path.join(root, fname))
-
-            if not image_files:
-                return {"error": "ZIP 文件中没有找到图片"}
-
-            logger.info("ZIP 中包含 %d 张图片，开始批量检测", len(image_files))
-
-            batch_result = self.detect_batch(
-                image_paths=image_files,
-                conf=conf,
-                scene_id=scene_id,
-                user_id=user_id,
-            )
-
-            batch_result["source"] = "zip"
-            batch_result["zip_filename"] = os.path.basename(zip_path)
-            batch_result["total_images_in_zip"] = len(image_files)
-
-            return batch_result
-
-        except zipfile.BadZipFile:
-            return {"error": f"无效的 ZIP 文件: {zip_path}"}
-        except Exception as e:
-            logger.error("ZIP 检测异常: %s", str(e), exc_info=True)
-            return {"error": f"ZIP 检测失败: {str(e)}"}
-        finally:
-            if temp_dir and os.path.exists(temp_dir):
-                import shutil
-
-                shutil.rmtree(temp_dir, ignore_errors=True)
+        for r in results:
+            db.refresh(r)
+        return results
 
 
+# 全局单例
 detection_service = DetectionService()

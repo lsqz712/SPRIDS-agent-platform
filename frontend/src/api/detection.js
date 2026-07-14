@@ -1,45 +1,30 @@
-/**
- * 检测相关 API 接⼝
- *
- * 快捷按钮直接调⽤这些接⼝（跳过 LLM），结果渲染在对话中
- */
-import request from "@/utils/request";
-/**
- * 单图检测
- * @param {FormData} formData - 包含 file 字段的 FormData
- * @returns {Promise} - 检测结果（标注图 + ⽬标统计）
- */
-export function detectSingle(formData) {
-// 不设置 Content-Type，让 axios ⾃动添加 multipart/form-data + boundary
-  return request.post("/detection/single", formData, {
-    timeout: 60000,
-  });
+import request from '@/utils/request'
+
+export function getScenesApi() {
+  return request.get('/detection/scenes')
 }
-/**
- * 批量检测
- * @param {FormData} formData - 包含多个 files 字段的 FormData
- * @returns {Promise} - 批量检测结果
- */
-export function detectBatch(formData) {
-  return request.post("/detection/batch", formData, {
+
+export function detectSingleApi(formData) {
+  return request.post('/detection/single', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
     timeout: 120000,
-  });
+  })
 }
-/**
- * ZIP 检测
- * @param {FormData} formData - 包含 file 字段的 FormData
- * @returns {Promise} - ZIP 解压后的批量检测结果
- */
-export function detectZip(formData) {
-  return request.post("/detection/zip", formData, {
+
+export function detectBatchApi(formData) {
+  return request.post('/detection/batch', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
     timeout: 180000,
-  });
+  })
 }
-/**
- * 获取检测任务状态
- * @param {number} taskId - 检测任务 ID
- * @returns {Promise} - 任务状态和结果
- */
-export function getDetectionStatus(taskId) {
-  return request.get(`/detection/status/${taskId}`);
+
+export function detectVideoApi(formData) {
+  return request.post('/detection/video', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+    timeout: 300000,
+  })
+}
+
+export function getTaskDetailApi(taskId) {
+  return request.get(`/detection/tasks/${taskId}`)
 }

@@ -1,11 +1,11 @@
 /**
  * Vue Router 路由配置
- * - 登录/注册⻚⾯⽆需认证
- * - 其他⻚⾯需要登录后才能访问
- * - 路由守卫⾃动检查登录状态
+ * - 登录/注册页面无需认证
+ * - 其他页面需要登录后才能访问
+ * - 路由守卫自动检查登录状态
  */
 import { createRouter, createWebHistory } from 'vue-router'
-// ── 路由定义 ────────────────────────────────────────
+
 const routes = [
   {
     path: '/login',
@@ -19,7 +19,6 @@ const routes = [
     component: () => import('@/views/RegisterPage.vue'),
     meta: { title: '注册', requiresAuth: false },
   },
-// ── 需要登录的⻚⾯（使⽤ MainLayout 布局） ──────
   {
     path: '/',
     component: () => import('@/components/layout/MainLayout.vue'),
@@ -36,7 +35,7 @@ const routes = [
         path: 'detection',
         name: 'Detection',
         component: () => import('@/views/DetectionPage.vue'),
-        meta: { title: '检测⼯作台', icon: 'Camera' },
+        meta: { title: '检测工作台', icon: 'Camera' },
       },
       {
         path: 'training',
@@ -56,38 +55,42 @@ const routes = [
         component: () => import('@/views/DashboardPage.vue'),
         meta: { title: '数据看板', icon: 'DataAnalysis' },
       },
+      {
+        path: 'profile',
+        name: 'Profile',
+        component: () => import('@/views/ProfilePage.vue'),
+        meta: { title: '个人中心', icon: 'User' },
+      },
     ],
   },
-// ── 404 ⻚⾯ ─────────────────────────────────────
   {
     path: '/:pathMatch(.*)*',
     redirect: '/login',
   },
 ]
-// ── 创建路由实例 ──────────────────────────────────────
+
 const router = createRouter({
   history: createWebHistory(),
   routes,
 })
-// ── 路由守卫 ────────────────────────────────────────
+
 router.beforeEach((to, from, next) => {
-// 设置⻚⾯标题
   document.title = to.meta.title
-    ? `${to.meta.title} - SPRIDS Agent Platform`
-    : 'SPRIDS Agent Platform'
-// 检查是否需要认证
-  const token = localStorage.getItem('SPRIDS_token')
-  const requiresAuth = to.matched.some((record) => record.meta.requiresAuth !== false)
+    ? `${to.meta.title} - Phrolova Agent Platform`
+    : 'Phrolova Agent Platform'
+
+  const token = localStorage.getItem('rsod_token')
+  const requiresAuth = to.matched.some(
+    (record) => record.meta.requiresAuth !== false,
+  )
+
   if (requiresAuth && !token) {
-// 需要登录但未登录，跳转到登录⻚
     next({ path: '/login', query: { redirect: to.fullPath } })
-  } 
-  else if ((to.path === '/login' || to.path === '/register') && token) {
-// 已登录⽤户访问登录/注册⻚，跳转到⾸⻚
+  } else if ((to.path === '/login' || to.path === '/register') && token) {
     next('/')
-  } 
-  else {
+  } else {
     next()
   }
 })
+
 export default router

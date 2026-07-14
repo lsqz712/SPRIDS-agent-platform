@@ -1,0 +1,252 @@
+@use './variables.scss' as *;
+@use './phro-cursor.scss' as phro-cursor;
+
+@mixin phro-hover-accent {
+  border-color: rgba($phro-gold, 0.5);
+  box-shadow:
+    inset 3px 0 0 rgba($phro-gold, 0.9),
+    0 0 0 1px rgba($phro-gold, 0.22);
+}
+
+@mixin phro-selected-accent {
+  border-color: rgba($phro-gold, 0.65);
+  box-shadow:
+    inset 4px 0 0 $phro-gold,
+    0 0 0 1px rgba($phro-gold, 0.28);
+}
+
+@mixin phro-action-btn-states {
+  background: $phro-btn-bg;
+
+  &:hover:not(:disabled):not(.active) {
+    background: $phro-btn-bg;
+    @include phro-hover-accent;
+  }
+
+  &:active:not(:disabled):not(.active) {
+    background: $phro-btn-bg;
+    @include phro-selected-accent;
+  }
+
+  &.active,
+  &.active:hover,
+  &.active:active {
+    background: $phro-btn-bg;
+    color: $phro-text-deep;
+    @include phro-selected-accent;
+  }
+
+  &:focus-visible:not(.active) {
+    outline: none;
+    background: $phro-btn-bg;
+    @include phro-hover-accent;
+  }
+
+  &:disabled {
+    opacity: 0.45;
+    @include phro-cursor.phro-cursor-not-allowed;
+  }
+}
+
+@mixin phro-module-box {
+  background: $phro-panel-bg;
+  border: $phro-divider-width solid $phro-border;
+  border-radius: $phro-radius;
+}
+
+@mixin phro-module-stack {
+  display: flex;
+  flex-direction: column;
+  gap: $phro-module-gap;
+  min-height: 0;
+}
+
+@mixin phro-panel-sections {
+  @include phro-module-stack;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+
+  > .phro-module,
+  > .phro-card {
+    flex-shrink: 0;
+  }
+
+  > .phro-module--grow,
+  > .phro-card--grow {
+    @include phro-module-box;
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+  }
+}
+
+@mixin phro-glass-window {
+  background: $phro-glass-bg;
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  border: 1px solid $phro-glass-border;
+  border-radius: $border-radius-lg;
+  box-shadow: 0 12px 40px rgba(40, 0, 12, 0.35);
+}
+
+// 子菜单/右键气泡：单一 clip-path 毛玻璃层，箭头与气泡体绝对同色
+@mixin phro-glass-surface {
+  background: $phro-glass-bg;
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+}
+
+@mixin phro-bubble-tail-left {
+  --tail-size: 7px;
+  --bubble-r: #{$phro-radius};
+  --bubble-r-inner: 4px;
+  position: relative;
+  isolation: isolate;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px;
+  padding-left: calc(10px + var(--tail-size));
+  box-sizing: border-box;
+  background: transparent;
+  border: none;
+  overflow: visible;
+  filter:
+    drop-shadow(0 0 0 1px $phro-glass-border)
+    drop-shadow(0 8px 28px rgba(20, 0, 8, 0.28));
+
+  &::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    @include phro-glass-surface;
+    clip-path: var(
+      --bubble-clip,
+      polygon(
+        0 calc(var(--arrow-top, 14px) + var(--tail-size)),
+        var(--tail-size) calc(var(--arrow-top, 14px) + var(--tail-size) * 2),
+        var(--tail-size) 100%,
+        100% 100%,
+        100% 0,
+        var(--tail-size) 0,
+        var(--tail-size) var(--arrow-top, 14px)
+      )
+    );
+    pointer-events: none;
+  }
+
+  > * {
+    position: relative;
+    z-index: 1;
+  }
+}
+
+@mixin phro-bubble-tail-top {
+  --tail-size: 7px;
+  --bubble-r: #{$phro-radius};
+  position: relative;
+  isolation: isolate;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+  padding-top: calc(10px + var(--tail-size));
+  box-sizing: border-box;
+  background: transparent;
+  border: none;
+  overflow: visible;
+  filter:
+    drop-shadow(0 0 0 1px $phro-glass-border)
+    drop-shadow(0 8px 28px rgba(20, 0, 8, 0.28));
+
+  &::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    @include phro-glass-surface;
+    clip-path: var(
+      --bubble-clip,
+      polygon(
+        calc(var(--arrow-left, 16px) - var(--tail-size)) var(--tail-size),
+        var(--arrow-left, 16px) 0,
+        calc(var(--arrow-left, 16px) + var(--tail-size)) var(--tail-size),
+        100% var(--tail-size),
+        100% 100%,
+        0 100%,
+        0 var(--tail-size)
+      )
+    );
+    pointer-events: none;
+  }
+
+  > * {
+    position: relative;
+    z-index: 1;
+  }
+}
+
+@mixin phro-flyout-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 10px;
+  border: $phro-divider-width solid rgba($phro-gold, 0.22);
+  border-radius: $phro-radius-sm;
+  background: rgba($phro-panel-bg, 0.92);
+  color: $phro-text-deep;
+  text-align: left;
+  font-family: inherit;
+  font-size: 12px;
+  line-height: 1.35;
+  appearance: none;
+  transition: box-shadow 0.2s, border-color 0.2s, opacity 0.2s;
+
+  &:hover:not(:disabled),
+  &:focus-visible:not(:disabled) {
+    outline: none;
+    border-color: rgba($phro-gold, 0.5);
+    box-shadow:
+      inset 3px 0 0 rgba($phro-gold, 0.9),
+      0 0 0 1px rgba($phro-gold, 0.22);
+  }
+
+  &:disabled {
+    opacity: 0.45;
+    @include phro-cursor.phro-cursor-not-allowed;
+  }
+}
+
+@mixin phro-btn-base {
+  color: $phro-text-deep;
+  background: $phro-btn-bg;
+  border: $phro-divider-width solid $phro-border;
+  border-radius: $phro-radius-sm;
+  @include phro-cursor.phro-cursor-pointer;
+  font-family: inherit;
+  transition: background 0.2s, color 0.2s, box-shadow 0.2s, border-color 0.2s;
+  appearance: none;
+  @include phro-action-btn-states;
+}
+
+@mixin phro-input-base {
+  background: #fff;
+  border: 1px solid $phro-border;
+  border-radius: $phro-radius-sm;
+  color: $phro-text-deep;
+  font-family: inherit;
+  font-size: 14px;
+  @include phro-cursor.phro-cursor-text;
+
+  &::placeholder {
+    color: $phro-text-mid;
+  }
+
+  &:focus {
+    border-color: rgba($phro-rose, 0.55);
+    outline: none;
+  }
+}

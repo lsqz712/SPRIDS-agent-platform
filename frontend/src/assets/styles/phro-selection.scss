@@ -1,0 +1,39 @@
+@use './variables.scss' as *;
+
+.layout-body--feixun {
+  input,
+  textarea,
+  [contenteditable='true'],
+  .msg-bubble,
+  .msg-body,
+  .msg-text,
+  .markdown-body,
+  .chat-input,
+  .phro-table-wrap,
+  .phro-table-wrap * {
+    &::selection {
+      background: rgba($phro-gold, 0.42);
+      color: $phro-crimson;
+    }
+
+    &::-moz-selection {
+      background: rgba($phro-gold, 0.42);
+      color: $phro-crimson;
+    }
+
+    -webkit-touch-callout: none;
+  }
+}
+
+.app-sidebar,
+.app-tool-flyout {
+  ::selection {
+    background: transparent;
+    color: inherit;
+  }
+
+  ::-moz-selection {
+    background: transparent;
+    color: inherit;
+  }
+}

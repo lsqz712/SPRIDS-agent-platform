@@ -272,8 +272,12 @@ class ChatSessionResponse(BaseModel):
     model_config = {"from_attributes": True}
 class ChatMessageRequest(BaseModel):
     """发送消息请求"""
-    session_id: Optional[int] = Field(None, description="会话 ID（为空则⾃动创建新会话）")
+    session_id: Optional[int] = Field(None, description="会话 ID（为空则自动创建新会话）")
     content: str = Field(..., min_length=1, max_length=5000, description="消息内容")
+
+class ChatStreamRequest(BaseModel):
+    """流式聊天请求"""
+    message: str = Field(..., min_length=1, max_length=5000, description="用户消息内容")
 class ChatMessageResponse(BaseModel):
     """对话消息响应"""
     id: int
@@ -338,3 +342,184 @@ class HealthResponse(BaseModel):
     database: Optional[str] = None
     redis: Optional[str] = None
     minio: Optional[str] = None
+
+
+class SceneUpdate(BaseModel):
+    """更新检测场景（所有字段可选）"""
+    display_name: Optional[str] = Field(None, description="场景显示名")
+    description: Optional[str] = Field(None, description="场景描述")
+    category: Optional[str] = Field(None, description="场景分类")
+    class_names: Optional[list[str]] = Field(None, description="类别列表")
+    class_names_cn: Optional[dict[str, str]] = Field(None, description="中文名映射")
+    is_active: Optional[bool] = Field(None, description="是否启用")
+
+
+class DefectTypeCreate(BaseModel):
+    """创建缺陷类型"""
+    code: str = Field(..., min_length=2, max_length=50, description="缺陷编码，如 SHORT_01")
+    name: str = Field(..., min_length=2, max_length=100, description="缺陷名称")
+    name_cn: str = Field(..., min_length=1, max_length=100, description="中文名称")
+    severity: str = Field(default="major", pattern="^(minor|major|critical)$", description="默认严重程度")
+    description: Optional[str] = Field(None, max_length=500, description="缺陷描述")
+
+
+class DefectTypeUpdate(BaseModel):
+    """更新缺陷类型（所有字段可选）"""
+    code: Optional[str] = Field(None, min_length=2, max_length=50, description="缺陷编码")
+    name: Optional[str] = Field(None, min_length=2, max_length=100, description="缺陷名称")
+    name_cn: Optional[str] = Field(None, min_length=1, max_length=100, description="中文名称")
+    severity: Optional[str] = Field(None, pattern="^(minor|major|critical)$", description="默认严重程度")
+    description: Optional[str] = Field(None, max_length=500, description="缺陷描述")
+    is_active: Optional[bool] = Field(None, description="是否启用")
+
+
+class DefectTypeResponse(BaseModel):
+    """缺陷类型响应"""
+    id: int
+    code: str
+    name: str
+    name_cn: str
+    severity: str
+    description: Optional[str] = None
+    is_active: bool
+    model_config = {"from_attributes": True}
+
+
+class BatchCreate(BaseModel):
+    """创建PCB批次"""
+    batch_no: str = Field(..., description="批次号，如 BATCH-20250701-001")
+    pcb_type: str = Field(..., description="PCB型号，如 PCB-V2.1")
+    production_line: str = Field(..., description="产线编号，如 LINE-A01")
+    total_count: int = Field(..., ge=1, description="批次总数量")
+    status: str = Field(default="pending", description="状态：pending/in_progress/completed")
+
+
+class BatchUpdate(BaseModel):
+    """更新PCB批次（所有字段可选）"""
+    batch_no: Optional[str] = Field(None, description="批次号")
+    pcb_type: Optional[str] = Field(None, description="PCB型号")
+    production_line: Optional[str] = Field(None, description="产线编号")
+    total_count: Optional[int] = Field(None, ge=1, description="批次总数量")
+    status: Optional[str] = Field(None, description="状态：pending/in_progress/completed")
+
+
+class BatchResponse(BaseModel):
+    """PCB批次响应"""
+    id: int
+    batch_no: str
+    pcb_type: str
+    production_line: str
+    total_count: int
+    inspected_count: int
+    pass_count: int
+    fail_count: int
+    pass_rate: float
+    status: str
+    created_by: Optional[int] = None
+    created_at: datetime
+    updated_at: datetime
+    model_config = {"from_attributes": True}
+
+
+class DetectionSingleRequest(BaseModel):
+    """单图检测请求"""
+    scene_id: int = Field(..., description="检测场景 ID")
+    model_version_id: Optional[int] = Field(None, description="指定模型版本 ID")
+    conf_threshold: float = Field(default=0.25, ge=0.01, le=1.0, description="置信度阈值")
+    iou_threshold: float = Field(default=0.45, ge=0.01, le=1.0, description="NMS IoU 阈值")
+    batch_id: Optional[int] = Field(None, description="关联 PCB 批次 ID")
+
+
+class DetectionBatchRequest(BaseModel):
+    """批量检测请求"""
+    scene_id: int = Field(..., description="检测场景 ID")
+    model_version_id: Optional[int] = Field(None, description="指定模型版本 ID")
+    conf_threshold: float = Field(default=0.25, ge=0.01, le=1.0, description="置信度阈值")
+    iou_threshold: float = Field(default=0.45, ge=0.01, le=1.0, description="NMS IoU 阈值")
+    batch_id: Optional[int] = Field(None, description="关联 PCB 批次 ID")
+
+
+class ResultReviewRequest(BaseModel):
+    """人工复判请求"""
+    review_status: str = Field(..., pattern="^(pending|pass|fail|repair)$", description="复判状态")
+    severity: Optional[str] = Field(None, pattern="^(minor|major|critical)$", description="缺陷严重等级")
+    defect_type_id: Optional[int] = Field(None, description="缺陷类型 ID")
+    repair_suggestion: Optional[str] = Field(None, max_length=1000, description="维修/调整建议")
+
+
+class ResultSeverityRequest(BaseModel):
+    """标注缺陷严重等级请求"""
+    severity: str = Field(..., pattern="^(minor|major|critical)$", description="缺陷严重等级")
+
+
+class ResultRepairSuggestionRequest(BaseModel):
+    """更新维修建议请求"""
+    repair_suggestion: str = Field(..., max_length=1000, description="维修/调整建议")
+
+
+class ResultResponse(BaseModel):
+    """单条检测结果完整响应（含复判与维修信息）"""
+    id: int
+    task_id: int
+    image_path: str
+    annotated_image_url: Optional[str] = None
+    class_name: str
+    class_name_cn: Optional[str] = None
+    class_id: int
+    confidence: float
+    bbox: list
+    inference_time: Optional[float] = None
+    image_width: Optional[int] = None
+    image_height: Optional[int] = None
+    review_status: str = "pending"
+    severity: Optional[str] = None
+    repair_suggestion: Optional[str] = None
+    reviewer_id: Optional[int] = None
+    reviewer_name: Optional[str] = None
+    reviewed_at: Optional[datetime] = None
+    defect_type_id: Optional[int] = None
+    created_at: datetime
+    model_config = {"from_attributes": True}
+
+
+class OverviewStatistics(BaseModel):
+    """总览统计响应"""
+    total_tasks: int
+    completed_tasks: int
+    failed_tasks: int
+    total_images: int
+    total_objects: int
+    avg_inference_time_ms: float
+    class_distribution: dict[str, int]
+    review_distribution: dict[str, int]
+    severity_distribution: dict[str, int]
+    scene_distribution: dict[str, int]
+
+
+class DailyTrendItem(BaseModel):
+    """每日趋势条目"""
+    date: str
+    task_count: int
+    image_count: int
+    object_count: int
+
+
+class DefectDistributionItem(BaseModel):
+    """缺陷分布条目"""
+    class_name: str
+    count: int
+
+
+class DefectDistributionResponse(BaseModel):
+    """缺陷分布响应"""
+    items: list[DefectDistributionItem]
+    total: int
+
+
+class SceneDistributionItem(BaseModel):
+    """场景分布条目"""
+    scene_id: int
+    scene_name: str
+    task_count: int
+    image_count: int
+    object_count: int
