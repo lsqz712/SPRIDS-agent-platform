@@ -8,8 +8,51 @@
       </el-tag>
     </div>
     <div class="card-body">
+      <!-- 视频检测结果：标注视频播放器 -->
+      <div
+        v-if="result.type === 'video' || result.annotated_video_url || result.key_frames"
+        class="video-result"
+      >
+        <div class="video-info">
+          <el-tag type="info" v-if="result.duration_seconds">时长: {{ result.duration_seconds }}s</el-tag>
+          <el-tag type="info" v-if="result.fps">FPS: {{ result.fps }}</el-tag>
+          <el-tag type="info" v-if="result.processed_frames">采样帧: {{ result.processed_frames }}</el-tag>
+          <el-tag type="success">目标: {{ result.total_objects }}</el-tag>
+        </div>
+        <!-- 标注视频播放器 -->
+        <div v-if="result.annotated_video_url" class="video-player">
+          <video
+            :src="result.annotated_video_url"
+            controls
+            preload="metadata"
+          ></video>
+        </div>
+        <!-- 降级：如果视频 URL 不可用，展示少量关键帧缩略图 -->
+        <div v-else-if="result.key_frames" class="frames-fallback">
+          <p class="fallback-hint">标注视频生成中或上传失败，以下为关键帧预览：</p>
+          <div class="frames-container">
+            <div
+              v-for="(frame, index) in thumbnailFrames"
+              :key="index"
+              class="frame-card"
+              @click="previewVideoFrame(frame)"
+            >
+              <img
+                v-if="frame.annotated_image_base64"
+                :src="`data:image/jpeg;base64,${frame.annotated_image_base64}`"
+                :alt="`帧 ${frame.frame_index}`"
+              />
+              <div class="frame-info">
+                <span>{{ frame.timestamp }}s</span>
+                <span>{{ frame.object_count }} 个目标</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <!-- 单图模式：标注图 -->
-      <div class="result-image" v-if="annotatedImageSrc && !isBatch">
+      <div class="result-image" v-if="annotatedImageSrc && !isBatch && !result.annotated_video_url && !result.key_frames">
         <img
           :src="annotatedImageSrc"
           alt="检测标注图"
@@ -116,6 +159,20 @@ function previewImage(img) {
   previewSrc.value = img.src;
   showFullImage.value = true;
 }
+/** 视频关键帧缩略图（仅展示有 base64 的前 6 帧） */
+const thumbnailFrames = computed(() => {
+  const frames = props.result.key_frames || [];
+  return frames.filter(f => f.annotated_image_base64).slice(0, 6);
+});
+
+/** 点击预览关键帧大图 */
+function previewVideoFrame(frame) {
+  if (frame.annotated_image_base64) {
+    previewSrc.value = `data:image/jpeg;base64,${frame.annotated_image_base64}`;
+    showFullImage.value = true;
+  }
+}
+
 /** 类别统计转为数组（⽤于 el-table） */
 const classCountsArray = computed(() => {
   const counts = props.result.class_counts || {};
@@ -195,6 +252,68 @@ const classCountsArray = computed(() => {
     }
   }
 }
+/* 视频检测结果 */
+.video-result {
+  flex: 1;
+  min-width: 0;
+}
+
+.video-info {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+}
+
+.video-player {
+  video {
+    width: 100%;
+    max-height: 360px;
+    border-radius: 8px;
+    background: #000;
+  }
+}
+
+/* 降级：关键帧缩略图 */
+.fallback-hint {
+  font-size: 12px;
+  color: #909399;
+  margin-bottom: 8px;
+}
+
+.frames-container {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 12px;
+}
+
+.frame-card {
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  overflow: hidden;
+  cursor: pointer;
+  transition: opacity 0.2s;
+}
+
+.frame-card:hover {
+  opacity: 0.8;
+}
+
+.frame-card img {
+  width: 100%;
+  height: 120px;
+  object-fit: cover;
+}
+
+.frame-info {
+  display: flex;
+  justify-content: space-between;
+  padding: 6px 8px;
+  font-size: 12px;
+  color: #666;
+  background: #fafafa;
+}
+
 .result-stats {
   flex: 0 0 180px;
   .stat-item {

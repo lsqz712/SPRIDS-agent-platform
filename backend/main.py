@@ -6,6 +6,7 @@ from app.config.settings import settings
 from app.api.auth import router as auth_router
 from app.core.exceptions import register_exception_handlers
 from app.middleware.request_logger import RequestLogMiddleware
+from app.middleware.rate_limiter import RateLimiterMiddleware
 from app.api.health import router as health_router
 from app.api.chat import router as chat_router
 from app.api.models import router as models_router
@@ -49,13 +50,15 @@ app.add_middleware(
     allow_headers=["*"],
 )
 app.add_middleware(RequestLogMiddleware)
+# 速率限制中间件
+app.add_middleware(RateLimiterMiddleware)
 # ── 注册路由 ─────────────────────────────────────────
-app.include_router(chat_router.router)
-app.include_router(detection_router.router)
-app.include_router(auth_router.router)
-app.include_router(health_router.router)
-app.include_router(models_router.router)
-app.include_router(scenes_router.router)
+app.include_router(chat_router)
+app.include_router(detection_router)
+app.include_router(auth_router)
+app.include_router(health_router)
+app.include_router(models_router)
+app.include_router(scenes_router)
 @app.get("/")
 def root():
     return {
@@ -64,7 +67,11 @@ def root():
         "docs": "/docs",
         "redoc": "/redoc",
     }
-app.include_router(health_router)
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
+    uvicorn.run(
+        "main:app",
+        host="0.0.0.0",
+        port=8001,
+        reload=False,
+    )

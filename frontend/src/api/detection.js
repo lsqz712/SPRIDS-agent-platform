@@ -36,10 +36,29 @@ export function detectZip(formData) {
   });
 }
 /**
- * 获取检测任务状态
- * @param {number} taskId - 检测任务 ID
- * @returns {Promise} - 任务状态和结果
+ * 视频检测
+ * @param {FormData} formData - 包含 file 字段的 FormData（视频文件）
+ * @returns {Promise} - { task_id, status, message }
  */
+export function detectVideo(formData) {
+  return request.post("/detection/video", formData, {
+    timeout: 120000, // 视频上传可能较慢
+  });
+}
+
+/**
+ * 查询视频检测进度
+ * @param {number} taskId - 视频检测任务 ID
+ * @returns {Promise} - { status, progress, result, ... }
+ */
+export function getVideoStatus(taskId) {
+  return request.get(`/detection/video/status/${taskId}`);
+}
+
+export function listDetections(page = 1, pageSize = 20) {
+  return request.get("/detection/list", { params: { page, page_size: pageSize } });
+}
+
 export function getDetectionStatus(taskId) {
   return request.get(`/detection/status/${taskId}`);
 }

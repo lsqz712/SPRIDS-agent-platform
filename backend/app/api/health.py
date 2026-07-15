@@ -1,83 +1,61 @@
-"""
-健康检查 API 路由
-接⼝列表：
-  - GET /api/health        基础健康检查（应⽤状态）   
-  - GET /api/health/detail 详细健康检查（含数据库、Redis、MinIO 状态）   
-设计原则：
-  - 基础检查不依赖外部服务，响应快
-  - 详细检查逐⼀验证各依赖服务的连通性
-  - 任⼀服务不可⽤时不抛异常，⽽是标记为 unhealthy  
-"""
-
 from fastapi import APIRouter
-from app.config.settings import settings
-from app.core.logger import get_logger
-logger = get_logger(__name__)
-router = APIRouter(prefix="/api/health", tags=["健康检查"])
-@router.get("")
+
+router = APIRouter(tags=["健康检查"])
+
+
+@router.get("/api/health")
 async def health_check():
+    return {"code": 200, "message": "ok", "data": {"status": "healthy", "app_name": "SPRIDS Agent Platform", "version": "0.1.0"}}
+
+
+@router.get("/api/health/redis")
+async def redis_debug():
     """
-    基础健康检查
-    ⽤途：Docker liveness probe、负载均衡器探活
-    特点：不检查外部依赖，只确认应⽤进程存活
+    Redis 数据调试接口
+
+    用途：查看 Redis 中存储的所有键值数据
+    注意：生产环境建议关闭此接口或添加权限控制
     """
-    return {
-        "code": 200,
-        "message": "ok",
-        "data": {
-            "status": "healthy",
-            "app_name": settings.APP_NAME,
-            "version": settings.APP_VERSION,
-        },
-    }
-@router.get("/detail")
-async def health_check_detail():
-    """
-    详细健康检查
-    ⽤途：管理后台状态展示、运维监控
-    特点：逐⼀检测 PostgreSQL、Redis、MinIO 连通性
-    """
-    services = {}
-    # ── 检查 PostgreSQL ──────────────────────────────
     try:
-        from sqlalchemy import text
-        from app.database.session import SessionLocal
-        db = SessionLocal()
-        # 执⾏最简单的查询验证连接（SQLAlchemy 2.x 语法）
-        db.execute(text("SELECT 1"))
-        db.close()
-        services["database"] = {"status": "healthy", "message": "PostgreSQL 连接正常"}
+        from app.storage.redis_client import redis_client
+
+        data = redis_client.get_all_data()
+        return {
+            "code": 200,
+            "message": "ok",
+            "data": {
+                "use_redis": redis_client.info()["use_redis"],
+                "key_count": len(data),
+                "data": data,
+            },
+        }
     except Exception as e:
-        services["database"] = {"status": "unhealthy", "message": f"PostgreSQL 连接失败: {str(e)}"}
-        logger.error("PostgreSQL 健康检查失败: %s", str(e))
-    # ── 检查 Redis ───────────────────────────────────
+        return {
+            "code": 500,
+            "message": f"获取 Redis 数据失败: {str(e)}",
+            "data": None,
+        }
+
+
+@router.get("/api/health/redis/info")
+async def redis_info():
+    """
+    Redis 客户端状态信息
+
+    用途：查看 Redis 连接状态、键数量等信息
+    """
     try:
-        import redis
-        r = redis.from_url(settings.REDIS_URL)
-        r.ping()
-        r.close()
-        services["redis"] = {"status": "healthy", "message": "Redis 连接正常"}
+        from app.storage.redis_client import redis_client
+
+        info = redis_client.info()
+        return {
+            "code": 200,
+            "message": "ok",
+            "data": info,
+        }
     except Exception as e:
-        services["redis"] = {"status": "unhealthy", "message": f"Redis 连接失败: {str(e)}"}
-        logger.error("Redis 健康检查失败: %s", str(e))
-    # ── 检查 MinIO ───────────────────────────────────
-    try:
-        from app.storage.minio_client import MinIOClient
-        minio = MinIOClient()
-        minio.client.list_buckets()
-        services["minio"] = {"status": "healthy", "message": "MinIO 连接正常"}
-    except Exception as e:
-        services["minio"] = {"status": "unhealthy", "message": f"MinIO 连接失败: {str(e)}"}
-        logger.error("MinIO 健康检查失败: %s", str(e))
-# ── 汇总状态 ─────────────────────────────────────
-    all_healthy = all(s["status"] == "healthy" for s in services.values())
-    return {
-        "code": 200,
-        "message": "ok",
-        "data": {
-            "status": "healthy" if all_healthy else "degraded",
-            "app_name": settings.APP_NAME,
-            "version": settings.APP_VERSION,
-            "services": services,
-        },
-    }
+        return {
+            "code": 500,
+            "message": f"获取 Redis 状态失败: {str(e)}",
+            "data": None,
+        }
