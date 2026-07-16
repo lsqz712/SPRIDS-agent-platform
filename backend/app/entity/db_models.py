@@ -156,6 +156,7 @@ class DetectionTask(Base):
     model_version_id = Column(Integer, ForeignKey("model_versions.id", ondelete="SET NULL"), nullable=True, comment="使用的模型版本")
     
     task_type = Column(String(20), nullable=False, comment="检测类型：single/batch/folder/video/camera")
+    source = Column(String(20), default="manual", comment="任务来源：quick（快捷检测）/batch（批次检测）/manual（手动创建）")
     status = Column(Enum(TaskStatus), default=TaskStatus.PENDING, nullable=False, comment="任务状态")
     
     total_images = Column(Integer, default=0, comment="处理图像总数")

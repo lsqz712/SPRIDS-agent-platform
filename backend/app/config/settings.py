@@ -37,7 +37,7 @@ class Settings(BaseSettings):
     MINIO_ENDPOINT: str = "localhost:9000"
     MINIO_ACCESS_KEY: str = "minioadmin"
     MINIO_SECRET_KEY: str = "minioadmin"
-    MINIO_BUCKET: str = "SPRIDS-agent-images"
+    MINIO_BUCKET: str = "sprids-agent-images"
     MINIO_SECURE: bool = False
 
     JWT_SECRET_KEY: str = Field(..., description="JWT 加密密钥")   # 无默认值，必须从 .env 读取
@@ -54,6 +54,18 @@ class Settings(BaseSettings):
 
     LLM_API_KEY: str = ""
     LLM_BASE_URL: str = "https://api.openai.com/v1"
+
+    @property
+    def effective_llm_api_key(self) -> str:
+        return self.LLM_API_KEY or self.QWEN_API_KEY or self.OPENAI_API_KEY
+
+    @property
+    def effective_llm_base_url(self) -> str:
+        if self.LLM_API_KEY:
+            return self.LLM_BASE_URL
+        if self.QWEN_API_KEY:
+            return self.QWEN_BASE_URL
+        return self.OPENAI_BASE_URL
     LLM_MODEL_NAME: str = "gpt-4o-mini"
     LLM_TEMPERATURE: float = 0.1
     LLM_MAX_TOKENS: int = 4096

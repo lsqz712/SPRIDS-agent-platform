@@ -1,63 +1,27 @@
-﻿"""
+"""
 智能体对话 API — 弗洛洛风格流式聊天
 """
 import json
-from typing import Optional
 
-from fastapi import APIRouter, Depends, Header, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
-from jose import JWTError
-from sqlalchemy.orm import Session
 
-from app.config.settings import settings
 from app.core.logger import get_logger
-from app.core.security import decode_access_token
-from app.database.session import get_db
 from app.entity.schemas import ChatStreamRequest
 from app.services.chat_service import stream_chat
-from app.services.user_service import user_service
+from app.api.deps import get_chat_user
 
 logger = get_logger(__name__)
 
 router = APIRouter(prefix="/api/chat", tags=["智能对话"])
 
 
-class ChatUser:
-    def __init__(self, user_id: int, username: str):
-        self.id = user_id
-        self.username = username
-
-
-async def get_chat_user(
-    authorization: Optional[str] = Header(None),
-    db: Session = Depends(get_db),
-) -> ChatUser:
-    if not authorization or not authorization.startswith("Bearer "):
-        raise HTTPException(status_code=401, detail="未登录，请先登录或使用预览模式")
-
-    token = authorization.removeprefix("Bearer ").strip()
-
-    if token == "dev-preview" and settings.DEBUG:
-        return ChatUser(user_id=0, username="漂泊者")
-
-    try:
-        payload = decode_access_token(token)
-        user_id_str = payload.get("sub")
-        if user_id_str is None:
-            raise HTTPException(status_code=401, detail="无效的认证凭据")
-        user = user_service.get_user_by_id(db, int(user_id_str))
-        if not user:
-            raise HTTPException(status_code=401, detail="用户不存在")
-        return ChatUser(user_id=user.id, username=user.username)
-    except (JWTError, ValueError) as exc:
-        raise HTTPException(status_code=401, detail="无效的认证凭据") from exc
-
-
 @router.post("/stream")
 async def chat_stream(
     body: ChatStreamRequest,
-    user: ChatUser = Depends(get_chat_user),
+    user=Depends(get_chat_user),
 ):
+    """SSE 流式对话（弗洛洛风格）"""
     history = [{"role": m.role, "content": m.content} for m in body.history]
 
     async def event_generator():

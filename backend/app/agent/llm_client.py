@@ -9,7 +9,7 @@ from app.config.settings import settings
 
 class LLMClient:
     def __init__(self):
-        self.use_ollama = bool(settings.OLLAMA_BASE_URL) and not bool(settings.LLM_API_KEY)
+        self.use_ollama = bool(settings.OLLAMA_BASE_URL) and not bool(settings.effective_llm_api_key)
         self._client = None
         self._init_client()
 
@@ -24,15 +24,20 @@ class LLMClient:
             try:
                 from openai import OpenAI
                 self._client = OpenAI(
-                    api_key=settings.LLM_API_KEY,
-                    base_url=settings.LLM_BASE_URL,
+                    api_key=settings.effective_llm_api_key,
+                    base_url=settings.effective_llm_base_url,
                     timeout=settings.LLM_TIMEOUT,
                 )
             except ImportError:
                 raise HTTPException(status_code=500, detail="openai 库未安装")
 
     def generate(self, messages: List[Dict[str, str]], **kwargs) -> str:
-        model = kwargs.get("model", settings.OLLAMA_MODEL_NAME if self.use_ollama else settings.LLM_MODEL_NAME)
+        if self.use_ollama:
+            model = kwargs.get("model", settings.OLLAMA_MODEL_NAME)
+        elif settings.QWEN_API_KEY and not settings.LLM_API_KEY:
+            model = kwargs.get("model", settings.QWEN_MODEL)
+        else:
+            model = kwargs.get("model", settings.LLM_MODEL_NAME)
         temperature = kwargs.get("temperature", settings.LLM_TEMPERATURE)
         max_tokens = kwargs.get("max_tokens", settings.LLM_MAX_TOKENS)
 
@@ -59,7 +64,12 @@ class LLMClient:
             raise HTTPException(status_code=500, detail=f"LLM 调用失败: {str(e)}")
 
     def generate_stream(self, messages: List[Dict[str, str]], **kwargs) -> Iterator[str]:
-        model = kwargs.get("model", settings.OLLAMA_MODEL_NAME if self.use_ollama else settings.LLM_MODEL_NAME)
+        if self.use_ollama:
+            model = kwargs.get("model", settings.OLLAMA_MODEL_NAME)
+        elif settings.QWEN_API_KEY and not settings.LLM_API_KEY:
+            model = kwargs.get("model", settings.QWEN_MODEL)
+        else:
+            model = kwargs.get("model", settings.LLM_MODEL_NAME)
         temperature = kwargs.get("temperature", settings.LLM_TEMPERATURE)
         max_tokens = kwargs.get("max_tokens", settings.LLM_MAX_TOKENS)
 
@@ -93,7 +103,12 @@ class LLMClient:
             raise HTTPException(status_code=500, detail=f"LLM 流式调用失败: {str(e)}")
 
     def generate_with_tools(self, messages: List[Dict[str, str]], tools: List[Dict[str, Any]], **kwargs) -> Dict[str, Any]:
-        model = kwargs.get("model", settings.OLLAMA_MODEL_NAME if self.use_ollama else settings.LLM_MODEL_NAME)
+        if self.use_ollama:
+            model = kwargs.get("model", settings.OLLAMA_MODEL_NAME)
+        elif settings.QWEN_API_KEY and not settings.LLM_API_KEY:
+            model = kwargs.get("model", settings.QWEN_MODEL)
+        else:
+            model = kwargs.get("model", settings.LLM_MODEL_NAME)
         temperature = kwargs.get("temperature", settings.LLM_TEMPERATURE)
 
         try:

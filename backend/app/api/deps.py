@@ -1,4 +1,4 @@
-﻿"""
+"""
 公共依赖注入模块
   - 提供 get_current_user（从 JWT Token 解析当前用户）
   - 提供 get_current_active_user（验证用户是否被禁用）
@@ -57,3 +57,43 @@ async def get_current_active_user(
     if not current_user.is_active:
         raise HTTPException(status_code=403, detail="用户已被禁用")
     return current_user
+
+
+class ChatUser:
+    def __init__(self, user_id: int, username: str):
+        self.id = user_id
+        self.username = username
+
+
+async def get_chat_user(
+    token: str = Depends(oauth2_scheme),
+    db: Session = Depends(get_db),
+) -> ChatUser:
+    """
+    获取聊天用户信息（支持预览模式）
+    用于弗洛洛风格对话等需要用户标识但允许预览的场景
+    """
+    from app.config.settings import settings
+    
+    if token is None:
+        raise HTTPException(status_code=401, detail="未登录，请先登录或使用预览模式")
+
+    if token == "dev-preview" and settings.DEBUG:
+        return ChatUser(user_id=0, username="漂泊者")
+
+    credentials_exception = HTTPException(
+        status_code=401,
+        detail="无效的认证凭据",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+    try:
+        payload = decode_access_token(token)
+        user_id_str = payload.get("sub")
+        if user_id_str is None:
+            raise credentials_exception
+        user = user_service.get_user_by_id(db, int(user_id_str))
+        if not user:
+            raise credentials_exception
+        return ChatUser(user_id=user.id, username=user.username)
+    except (JWTError, ValueError) as exc:
+        raise credentials_exception from exc

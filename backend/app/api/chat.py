@@ -9,6 +9,8 @@
   - GET  /api/chat/sessions    获取会话列表
   - GET  /api/chat/sessions/{id}/messages  获取会话消息历史
   - DELETE /api/chat/sessions/{id}  删除会话
+  - POST /api/chat/message    发送消息
+  - GET  /api/chat/welcome    获取欢迎消息
 """
 
 import json
@@ -16,16 +18,15 @@ import os
 import tempfile
 from typing import Optional
 
-from fastapi import APIRouter, Depends, File, Header, HTTPException, Request, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
 from fastapi.responses import StreamingResponse
-from jose import JWTError
 from sqlalchemy.orm import Session
 
 from app.agent.detection_agent import detection_agent
 from app.api.auth import get_current_user
+from app.api.deps import get_chat_user
 from app.config.settings import settings
 from app.core.logger import get_logger
-from app.core.security import decode_access_token
 from app.database.session import get_db
 from app.entity.db_models import User
 from app.entity.schemas import (
@@ -34,7 +35,7 @@ from app.entity.schemas import (
 )
 from app.agent.core import AgentCore
 from app.services.chat_service import stream_chat
-from app.services.user_service import user_service
+from app.services.session_service import session_service
 
 logger = get_logger(__name__)
 
@@ -44,42 +45,12 @@ UPLOAD_DIR = os.path.join(tempfile.gettempdir(), "rsod_uploads")
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 
-class ChatUser:
-    def __init__(self, user_id: int, username: str):
-        self.id = user_id
-        self.username = username
-
-
-async def get_chat_user(
-    authorization: Optional[str] = Header(None),
-    db: Session = Depends(get_db),
-) -> ChatUser:
-    if not authorization or not authorization.startswith("Bearer "):
-        raise HTTPException(status_code=401, detail="未登录，请先登录或使用预览模式")
-
-    token = authorization.removeprefix("Bearer ").strip()
-
-    if token == "dev-preview" and settings.DEBUG:
-        return ChatUser(user_id=0, username="漂泊者")
-
-    try:
-        payload = decode_access_token(token)
-        user_id_str = payload.get("sub")
-        if user_id_str is None:
-            raise HTTPException(status_code=401, detail="无效的认证凭据")
-        user = user_service.get_user_by_id(db, int(user_id_str))
-        if not user:
-            raise HTTPException(status_code=401, detail="用户不存在")
-        return ChatUser(user_id=user.id, username=user.username)
-    except (JWTError, ValueError) as exc:
-        raise HTTPException(status_code=401, detail="无效的认证凭据") from exc
-
-
 @router.post("/upload", summary="上传图片文件")
 async def upload_image(
     file: UploadFile = File(...),
     current_user=Depends(get_current_user),
 ):
+    """上传图片文件，返回服务端路径"""
     suffix = os.path.splitext(file.filename)[1] or ".jpg"
     filename = f"{os.getpid()}_{file.filename}"
     file_path = os.path.join(UPLOAD_DIR, filename)
@@ -97,6 +68,7 @@ async def chat_stream(
     request: Request,
     current_user=Depends(get_current_user),
 ):
+    """SSE 流式对话（检测模式）"""
     body = await request.json()
     message = body.get("message", "")
     image_path = body.get("image_path")
@@ -117,6 +89,8 @@ async def chat_stream(
             async for event in detection_agent.chat_stream(
                 message=message,
                 image_path=image_path,
+                user_id=current_user.id if current_user else None,
+                session_id=session_id,
             ):
                 event_data = json.dumps(event, ensure_ascii=False)
                 yield f"data: {event_data}\n\n"
@@ -145,8 +119,9 @@ async def chat_stream(
 @router.post("/stream/phrolova")
 async def chat_stream_phrolova(
     request: Request,
-    user: ChatUser = Depends(get_chat_user),
+    user=Depends(get_chat_user),
 ):
+    """SSE 流式对话（弗洛洛风格）"""
     body = await request.json()
     message = body.get("message", "")
     history = body.get("history", [])
@@ -196,8 +171,8 @@ async def create_session(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    agent = AgentCore(db, current_user.id)
-    session = agent.create_session(title=request.title)
+    """创建新会话"""
+    session = session_service.create_session(db=db, user_id=current_user.id, title=request.title)
     return session
 
 
@@ -206,8 +181,8 @@ async def get_sessions(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    agent = AgentCore(db, current_user.id)
-    sessions = agent.get_session_list()
+    """获取会话列表"""
+    sessions = session_service.get_session_list(db=db, user_id=current_user.id)
     return sessions
 
 
@@ -217,29 +192,16 @@ async def get_messages(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    agent = AgentCore(db, current_user.id)
+    """获取会话消息历史"""
     try:
-        session = agent.get_session(session_id)
+        session = session_service.get_session(db=db, session_id=session_id)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
-    messages = agent.get_message_history(session_id)
-    message_responses = []
-    for msg in messages:
-        message_responses.append({
-            "id": msg.id,
-            "session_id": msg.session_id,
-            "role": msg.role,
-            "content": msg.content,
-            "agent_used": msg.agent_used,
-            "tool_calls": msg.tool_calls,
-            "tool_result": msg.tool_result,
-            "tokens_used": msg.tokens_used,
-            "latency_ms": msg.latency_ms,
-            "created_at": msg.created_at,
-        })
+    
+    messages = session_service.get_message_history(db=db, session_id=session_id)
     return {
         "session": session,
-        "messages": message_responses,
+        "messages": session_service.format_messages_response(messages),
     }
 
 
@@ -249,8 +211,8 @@ async def delete_session(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    agent = AgentCore(db, current_user.id)
-    agent.delete_session(session_id)
+    """删除会话"""
+    session_service.delete_session(db=db, session_id=session_id)
     return {"code": 200, "message": "会话已删除"}
 
 
@@ -260,19 +222,24 @@ async def send_message(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    agent = AgentCore(db, current_user.id)
+    """发送消息（非流式）"""
     session_id = request.session_id
     if not session_id:
-        session = agent.create_session()
+        session = session_service.create_session(db=db, user_id=current_user.id)
         session_id = session.id
     else:
         try:
-            agent.get_session(session_id)
+            session_service.get_session(db=db, session_id=session_id)
         except ValueError as e:
             raise HTTPException(status_code=404, detail=str(e))
-    agent.save_message(session_id, role="user", content=request.content)
+    
+    session_service.save_message(db=db, session_id=session_id, role="user", content=request.content)
+    
+    agent = AgentCore(db, current_user.id)
     response = agent.generate_response(session_id, request.content)
-    agent.save_message(session_id, role="assistant", content=response)
+    
+    session_service.save_message(db=db, session_id=session_id, role="assistant", content=response)
+    
     return {
         "session_id": session_id,
         "content": response,
@@ -284,5 +251,6 @@ async def get_welcome(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    """获取欢迎消息"""
     agent = AgentCore(db, current_user.id)
     return {"message": agent.get_welcome_message()}

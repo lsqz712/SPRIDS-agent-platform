@@ -1,4 +1,4 @@
-﻿"""
+"""
 检测任务 API 路由
 - GET    /api/tasks              任务列表（分页、筛选）
 - POST   /api/tasks/single       单图检测（需认证）
@@ -74,6 +74,7 @@ async def create_single_task(
     conf_threshold: float = Form(default=0.25, description="置信度阈值"),
     iou_threshold: float = Form(default=0.45, description="IoU 阈值"),
     batch_id: int | None = Form(default=None, description="关联 PCB 批次 ID"),
+    source: str = Form(default="manual", description="任务来源：quick/batch/manual"),
     db: Session = Depends(get_db),
     current_user: User | None = Depends(get_current_user),
 ):
@@ -85,6 +86,7 @@ async def create_single_task(
     - **conf_threshold**: 置信度阈值，默认 0.25
     - **iou_threshold**: NMS IoU 阈值，默认 0.45
     - **batch_id**: 关联的 PCB 批次 ID（可选）
+    - **source**: 任务来源：quick（快捷检测）/batch（批次检测）/manual（手动创建）
     """
     user_id = current_user.id if current_user else None
 
@@ -97,6 +99,7 @@ async def create_single_task(
         conf_threshold=conf_threshold,
         iou_threshold=iou_threshold,
         batch_id=batch_id,
+        source=source,
     )
 
     # TODO: 集成 YOLO 推理引擎
@@ -123,6 +126,7 @@ async def create_batch_task(
     conf_threshold: float = Form(default=0.25, description="置信度阈值"),
     iou_threshold: float = Form(default=0.45, description="IoU 阈值"),
     batch_id: int | None = Form(default=None, description="关联 PCB 批次 ID"),
+    source: str = Form(default="manual", description="任务来源：quick/batch/manual"),
     db: Session = Depends(get_db),
     current_user: User | None = Depends(get_current_user),
 ):
@@ -140,6 +144,7 @@ async def create_batch_task(
         iou_threshold=iou_threshold,
         batch_id=batch_id,
         image_count=len(images),
+        source=source,
     )
 
     return {

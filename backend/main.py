@@ -19,6 +19,7 @@ from app.api.batch import router as batch_router
 from app.api.statistics import router as statistics_router
 from app.api.defect_types import router as defect_types_router
 from app.api.results import router as results_router
+from app.api.websocket import router as websocket_router
 
 def init_minio():
     from app.storage.minio_client import MinIOClient
@@ -70,6 +71,7 @@ app.include_router(batch_router)
 app.include_router(statistics_router)
 app.include_router(defect_types_router)
 app.include_router(results_router)
+app.include_router(websocket_router)
 
 @app.get("/")
 def root():

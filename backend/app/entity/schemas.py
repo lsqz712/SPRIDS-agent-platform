@@ -123,6 +123,7 @@ class DetectionTaskResponse(BaseModel):
     scene_name: Optional[str] = None
     model_version_id: Optional[int] = None
     task_type: str
+    source: str
     status: str
     total_images: int
     total_objects: int

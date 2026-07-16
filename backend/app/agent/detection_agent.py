@@ -1,23 +1,26 @@
 """
-检测智能体 — ReAct Agent + 检测工具绑定
+检测智能体 — ReAct Agent + 检测工具绑定 + RAG + 对话记忆
 
 职责：
-  -. 创建 LangChain ReAct Agent
-  - 绑定检测相关工具（单图/批量/ZIP）
+  - 创建 LangChain ReAct Agent
+  - 绑定检测相关工具（单图/批量/ZIP/视频）
+  - 绑定数据查询工具（统计、任务、缺陷类型、训练等）
+  - 绑定 RAG 知识库工具（search_knowledge）
+  - 集成对话记忆（Redis），支持跨轮次上下文理解
   - 处理 SSE 流式输出 Agent 的思考过程和结果
 
 架构：
-  用户消息 → Agent（LLM 决策）→ 调用 DetectionTool → 返回结果
+  用户消息 → 对话记忆加载 → Agent（LLM 决策）→ 调用工具 → 返回结果 → 对话记忆保存
 
 使用方式：
   from app.agent.detection_agent import detection_agent
 
   agent = DetectionAgent()
-  response = await agent.chat("检测这张图片", image_path="xxx.jpg")
+  response = await agent.chat("检测这张图片", image_path="xxx.jpg", user_id=1, session_id="abc123")
 """
 
 import json
-from typing import AsyncGenerator
+from typing import AsyncGenerator, List, Dict
 
 from langchain.agents import AgentExecutor, create_openai_tools_agent
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
@@ -26,7 +29,12 @@ from langchain_openai import ChatOpenAI
 
 from app.config.settings import settings
 from app.core.logger import get_logger
+from app.database.session import SessionLocal
 from app.services.detection_service import detection_service
+from app.services.statistics_service import statistics_service
+from app.services.defect_type_service import defect_type_service
+from app.entity.db_models import TrainingTask, DetectionScene, PCBBatch
+from app.agent.memory import conversation_memory
 
 logger = get_logger(__name__)
 
@@ -80,7 +88,332 @@ def detect_zip_images_file(zip_path: str, conf: float = 0.25) -> str:
     return json.dumps(result, ensure_ascii=False)
 
 
-DETECTION_TOOLS = [detect_single_image, detect_batch_images, detect_zip_images_file]
+@tool
+def get_statistics_overview() -> str:
+    """
+    获取数据看板总览统计信息。
+
+    返回系统整体检测数据概览：
+    - 总任务数、完成任务数、失败任务数
+    - 总检测图像数、总检测目标数
+    - 平均推理耗时
+    - 各类别缺陷分布
+    - 各复判状态分布
+    - 各严重等级分布
+    - 各场景分布
+    """
+    db = SessionLocal()
+    try:
+        data = statistics_service.get_overview(db=db)
+        return json.dumps(data, ensure_ascii=False, default=str)
+    finally:
+        db.close()
+
+
+@tool
+def get_defect_types(keyword: str = None, severity: str = None, is_active: bool = None) -> str:
+    """
+    获取缺陷类型列表。
+
+    Args:
+        keyword: 搜索编码/名称/中文名（可选）
+        severity: 按严重等级筛选：minor/major/critical（可选）
+        is_active: 按启用状态筛选（可选）
+
+    返回缺陷类型列表，包含编码、名称、中文名、严重等级等信息。
+    """
+    db = SessionLocal()
+    try:
+        items = defect_type_service.list_defect_types(
+            db=db,
+            keyword=keyword,
+            severity=severity,
+            is_active=is_active,
+        )
+        result = []
+        for item in items:
+            result.append({
+                "id": item.id,
+                "code": item.code,
+                "name": item.name,
+                "name_cn": item.name_cn,
+                "severity": item.severity,
+                "description": item.description,
+                "is_active": item.is_active,
+                "created_at": str(item.created_at),
+            })
+        return json.dumps({"items": result, "total": len(result)}, ensure_ascii=False)
+    finally:
+        db.close()
+
+
+@tool
+def get_task_list(page: int = 1, page_size: int = 20, status: str = None, task_type: str = None) -> str:
+    """
+    获取检测任务列表。
+
+    Args:
+        page: 页码，默认 1
+        page_size: 每页数量，默认 20
+        status: 按状态筛选：pending/processing/completed/failed/cancelled（可选）
+        task_type: 按类型筛选：single/batch（可选）
+
+    返回任务列表，包含任务 ID、状态、类型、检测图像数、目标数等信息。
+    """
+    db = SessionLocal()
+    try:
+        tasks, total = detection_service.list_tasks(
+            db=db,
+            page=page,
+            page_size=page_size,
+            status=status,
+            task_type=task_type,
+        )
+        total_pages = (total + page_size - 1) // page_size
+        return json.dumps({
+            "total": total,
+            "page": page,
+            "page_size": page_size,
+            "total_pages": total_pages,
+            "items": tasks,
+        }, ensure_ascii=False, default=str)
+    finally:
+        db.close()
+
+
+@tool
+def get_task_detail(task_id: int) -> str:
+    """
+    获取检测任务详情。
+
+    Args:
+        task_id: 任务 ID
+
+    返回任务详情，包含任务状态、检测结果、分析报告等信息。
+    """
+    db = SessionLocal()
+    try:
+        task = detection_service.get_task_by_id(db=db, task_id=task_id)
+        task_data = {
+            "id": task.id,
+            "user_id": task.user_id,
+            "scene_id": task.scene_id,
+            "scene_name": task.scene.display_name if task.scene else None,
+            "model_version_id": task.model_version_id,
+            "task_type": task.task_type,
+            "status": task.status.value if hasattr(task.status, "value") else task.status,
+            "total_images": task.total_images,
+            "total_objects": task.total_objects,
+            "total_inference_time": task.total_inference_time,
+            "conf_threshold": task.conf_threshold,
+            "iou_threshold": task.iou_threshold,
+            "error_message": task.error_message,
+            "batch_id": task.batch_id,
+            "analysis_report": task.analysis_report,
+            "analysis_suggestion": task.analysis_suggestion,
+            "risk_level": task.risk_level,
+            "source": task.source,
+            "created_at": str(task.created_at),
+            "completed_at": str(task.completed_at) if task.completed_at else None,
+        }
+        return json.dumps(task_data, ensure_ascii=False)
+    finally:
+        db.close()
+
+
+@tool
+def get_history_records(page: int = 1, page_size: int = 20) -> str:
+    """
+    获取历史检测记录。
+
+    Args:
+        page: 页码，默认 1
+        page_size: 每页数量，默认 20
+
+    返回历史记录列表，包含任务 ID、用户、场景、状态、检测统计等信息。
+    """
+    db = SessionLocal()
+    try:
+        offset = (page - 1) * page_size
+        tasks = (
+            db.query(detection_service.task_model)
+            .order_by(detection_service.task_model.created_at.desc())
+            .offset(offset)
+            .limit(page_size)
+            .all()
+        )
+        total = db.query(detection_service.task_model).count()
+        items = []
+        for task in tasks:
+            items.append({
+                "id": task.id,
+                "user_id": task.user_id,
+                "scene_id": task.scene_id,
+                "scene_name": task.scene_name,
+                "task_type": task.task_type,
+                "status": task.status.value if hasattr(task.status, "value") else task.status,
+                "total_images": task.total_images,
+                "total_objects": task.total_objects,
+                "total_inference_time": task.total_inference_time,
+                "created_at": str(task.created_at),
+            })
+        return json.dumps({
+            "total": total,
+            "page": page,
+            "page_size": page_size,
+            "items": items,
+        }, ensure_ascii=False)
+    finally:
+        db.close()
+
+
+@tool
+def get_training_tasks() -> str:
+    """
+    获取模型训练任务列表。
+
+    返回所有训练任务，包含任务状态、模型名称、训练进度、epoch 等信息。
+    """
+    db = SessionLocal()
+    try:
+        tasks = db.query(TrainingTask).order_by(TrainingTask.created_at.desc()).all()
+        result = []
+        for task in tasks:
+            result.append({
+                "id": task.id,
+                "user_id": task.user_id,
+                "scene_id": task.scene_id,
+                "task_uuid": task.task_uuid,
+                "status": task.status,
+                "model_name": task.model_name,
+                "epochs": task.epochs,
+                "current_epoch": task.current_epoch,
+                "progress": task.progress,
+                "img_size": task.img_size,
+                "batch_size": task.batch_size,
+                "device": task.device,
+                "dataset_size": task.dataset_size,
+                "error_message": task.error_message,
+                "created_at": str(task.created_at),
+                "started_at": str(task.started_at) if task.started_at else None,
+                "completed_at": str(task.completed_at) if task.completed_at else None,
+            })
+        return json.dumps({"items": result, "total": len(result)}, ensure_ascii=False)
+    finally:
+        db.close()
+
+
+@tool
+def get_scenes() -> str:
+    """
+    获取检测场景列表。
+
+    返回所有检测场景，包含场景 ID、名称、类别等信息。
+    """
+    db = SessionLocal()
+    try:
+        scenes = db.query(DetectionScene).order_by(DetectionScene.created_at.desc()).all()
+        result = []
+        for scene in scenes:
+            result.append({
+                "id": scene.id,
+                "name": scene.name,
+                "display_name": scene.display_name,
+                "category": scene.category,
+                "description": scene.description,
+                "is_active": scene.is_active,
+                "created_at": str(scene.created_at),
+            })
+        return json.dumps({"items": result, "total": len(result)}, ensure_ascii=False)
+    finally:
+        db.close()
+
+
+@tool
+def get_batches() -> str:
+    """
+    获取PCB批次列表。
+
+    返回所有PCB批次，包含批次ID、名称、描述、创建时间等信息。
+    """
+    db = SessionLocal()
+    try:
+        batches = db.query(PCBBatch).order_by(PCBBatch.created_at.desc()).all()
+        result = []
+        for batch in batches:
+            result.append({
+                "id": batch.id,
+                "name": batch.name,
+                "description": batch.description,
+                "created_at": str(batch.created_at),
+            })
+        return json.dumps({"items": result, "total": len(result)}, ensure_ascii=False)
+    finally:
+        db.close()
+
+
+@tool
+def search_knowledge(query: str) -> str:
+    """
+    搜索知识库，回答目标检测、YOLO、PCB检测等领域知识问题。
+
+    当用户询问专业知识（如"什么是 IoU"、"YOLO 如何工作"、"PCB 缺陷类型"）时使用此工具。
+
+    Args:
+        query: 用户的问题或搜索关键词
+
+    Returns:
+        JSON 字符串，包含回答内容和来源信息
+    """
+    try:
+        from app.rag.retriever import knowledge_retriever
+        from app.rag.embedding import embedding_client
+        from app.agent.prompts import RAG_QA_PROMPT
+        from app.agent.llm_client import llm_client
+
+        results = knowledge_retriever.retrieve(query)
+        if not results:
+            return json.dumps({
+                "success": True,
+                "answer": "知识库中暂无相关内容",
+                "sources": [],
+            }, ensure_ascii=False)
+
+        context = "\n\n".join([f"【来源{idx+1}】{r['content']}" for idx, r in enumerate(results)])
+        prompt = RAG_QA_PROMPT.format(context=context, question=query)
+        answer = llm_client.generate([{"role": "user", "content": prompt}])
+
+        sources = []
+        for r in results:
+            sources.append({
+                "filename": r["metadata"].get("filename", "unknown"),
+                "similarity": r["similarity"],
+            })
+
+        return json.dumps({
+            "success": True,
+            "answer": answer,
+            "sources": sources,
+        }, ensure_ascii=False)
+    except Exception as e:
+        logger.error("知识库检索失败: %s", str(e))
+        return json.dumps({"error": f"知识库检索失败: {str(e)}"}, ensure_ascii=False)
+
+
+DETECTION_TOOLS = [
+    detect_single_image,
+    detect_batch_images,
+    detect_zip_images_file,
+    get_statistics_overview,
+    get_defect_types,
+    get_task_list,
+    get_task_detail,
+    get_history_records,
+    get_training_tasks,
+    get_scenes,
+    get_batches,
+    search_knowledge,
+]
 
 
 def create_llm():
@@ -118,25 +451,38 @@ class DetectionAgent:
             logger.info("DetectionAgent 初始化完成（模拟模式），绑定 %d 个工具", len(DETECTION_TOOLS))
             return
 
-        system_prompt = """你是一个专业的目标检测助手。你可以帮用户检测图片中的目标物体。
+        system_prompt = """你是一个专业的PCB检测智能助手。你可以帮用户检测图片中的PCB缺陷，也可以查询系统中的各类数据，还能回答目标检测领域的专业知识问题。
 
-重要规则：
-- 当用户消息中包含 [附件图片路径: xxx] 时，xxx 就是图片的服务器路径，你应直接使用它调用检测工具
-- 不要要求用户再次提供路径，直接使用附件中给出的路径
-- 对于单张图片，调用 detect_single_image 工具
-- 对于多张图片或 ZIP 文件，调用 detect_batch_images 或 detect_zip_images_file 工具
+可用工具：
+1. 检测工具：
+   - detect_single_image：检测单张图片中的PCB缺陷
+   - detect_batch_images：批量检测多张图片
+   - detect_zip_images_file：检测ZIP文件中的所有图片
 
-工作流程：
-1. 理解用户意图
-2. 如果有附件图片路径，直接调用检测工具
-3. 调用工具获取检测结果
-4. 用自然语言总结检测结果
+2. 数据查询工具：
+   - get_statistics_overview：获取数据看板总览统计（任务数、图像数、目标数、缺陷分布等）
+   - get_defect_types：获取缺陷类型列表（支持按关键词、严重等级筛选）
+   - get_task_list：获取检测任务列表（支持按状态、类型筛选）
+   - get_task_detail：获取单个任务的详细信息
+   - get_history_records：获取历史检测记录
+   - get_training_tasks：获取模型训练任务列表
+   - get_scenes：获取检测场景列表
+   - get_batches：获取PCB批次列表
+
+3. 知识问答工具：
+   - search_knowledge：搜索知识库，回答目标检测、YOLO、PCB检测等领域知识问题
+
+工具调用优先级：
+1. 如果消息中包含 [附件图片路径: xxx]，直接使用路径调用对应的检测工具
+2. 如果用户询问专业知识（如"什么是 IoU"、"YOLO 如何工作"），调用 search_knowledge
+3. 如果用户询问统计信息、任务记录、缺陷类型、训练状态等，调用相应的数据查询工具
+4. 如果不需要工具，直接用自身知识回答
 
 回复格式要求：
-- 先报告检测到的目标总数
-- 列出各类别的数量统计
-- 如果有标注图，告知用户可以在结果卡片中查看
-- 简洁专业，不要过度解释"""
+- 检测结果：先报告总数 → 列出各类别数量 → 提及推理耗时
+- 知识问答：先给简洁定义 → 再补充关键细节 → 控制在 200 字以内
+- 统计数据：用数字说话 → 适当给出趋势判断
+- 语言风格：简洁专业，中文回复，不要过度解释"""
 
         prompt = ChatPromptTemplate.from_messages(
             [
@@ -163,15 +509,31 @@ class DetectionAgent:
 
         logger.info("DetectionAgent 初始化完成，绑定 %d 个工具", len(DETECTION_TOOLS))
 
-    async def chat(self, message: str, image_path: str = None) -> dict:
+    async def chat(self, message: str, image_path: str = None, user_id: int = 1, session_id: str = None) -> dict:
         if image_path:
             message = f"{message}\n[附件图片路径: {image_path}]"
 
+        chat_history = []
+        if session_id:
+            chat_history = conversation_memory.load_history(user_id, session_id)
+            logger.debug("加载对话历史: user=%d, session=%s, 消息数=%d", user_id, session_id, len(chat_history))
+
         if self.use_simulated_mode:
-            return self._simulate_chat(message, image_path)
+            result = self._simulate_chat(message, image_path)
+            if session_id:
+                conversation_memory.save_message(user_id, session_id, "user", message)
+                conversation_memory.save_message(user_id, session_id, "ai", result["output"])
+            return result
 
         try:
-            result = await self.executor.ainvoke({"input": message})
+            result = await self.executor.ainvoke({
+                "input": message,
+                "chat_history": chat_history,
+            })
+
+            if session_id:
+                conversation_memory.save_message(user_id, session_id, "user", message)
+                conversation_memory.save_message(user_id, session_id, "ai", result["output"])
 
             return {
                 "output": result["output"],
@@ -184,18 +546,25 @@ class DetectionAgent:
                 "intermediate_steps": [],
             }
 
-    async def chat_stream(self, message: str, image_path: str = None) -> AsyncGenerator:
+    async def chat_stream(self, message: str, image_path: str = None, user_id: int = 1, session_id: str = None) -> AsyncGenerator:
         if image_path:
             message = f"{message}\n[附件图片路径: {image_path}]"
+
+        chat_history = []
+        if session_id:
+            chat_history = conversation_memory.load_history(user_id, session_id)
 
         if self.use_simulated_mode:
             async for event in self._simulate_chat_stream(message, image_path):
                 yield event
+            if session_id:
+                conversation_memory.save_message(user_id, session_id, "user", message)
             return
 
+        full_output = ""
         try:
             async for event in self.executor.astream_events(
-                {"input": message},
+                {"input": message, "chat_history": chat_history},
                 version="v2",
             ):
                 event_kind = event["event"]
@@ -203,6 +572,7 @@ class DetectionAgent:
                 if event_kind == "on_chat_model_stream":
                     chunk = event["data"]["chunk"]
                     if hasattr(chunk, "content") and chunk.content:
+                        full_output += chunk.content
                         yield {
                             "type": "text_chunk",
                             "content": chunk.content,
@@ -240,6 +610,11 @@ class DetectionAgent:
                 "type": "error",
                 "content": f"处理出错：{str(e)}",
             }
+
+        finally:
+            if session_id and full_output:
+                conversation_memory.save_message(user_id, session_id, "user", message)
+                conversation_memory.save_message(user_id, session_id, "ai", full_output)
 
     def _simulate_chat(self, message: str, image_path: str = None) -> dict:
         import re
