@@ -45,20 +45,20 @@ async def get_current_user(
     user = user_service.get_user_by_id(db, user_id)
     if user is None:
         raise credentials_exception
-    is_approved = getattr(user, 'is_approved', None)
-    if is_approved is not None and not is_approved and not user.is_superuser:
-        raise HTTPException(status_code=403, detail="账户尚未通过审批，请联系管理员")
     return user
 
 
 async def get_current_active_user(
     current_user: User = Depends(get_current_user),
 ) -> User:
-    """验证当前用户是否已被禁用"""
+    """验证当前用户是否已被禁用/未审批"""
     if current_user is None:
         raise HTTPException(status_code=401, detail="未登录")
     if not current_user.is_active:
         raise HTTPException(status_code=403, detail="用户已被禁用")
+    is_approved = getattr(current_user, 'is_approved', None)
+    if is_approved is not None and not is_approved and not current_user.is_superuser:
+        raise HTTPException(status_code=403, detail="账户尚未通过审批，请联系管理员")
     return current_user
 
 
