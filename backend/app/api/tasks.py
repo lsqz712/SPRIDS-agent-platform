@@ -194,17 +194,7 @@ async def delete_task(
 ):
     """
     删除检测任务（级联删除关联检测结果）
-    - 仅 pending/failed/cancelled 状态可删除
     """
-    task = detection_service.get_task_by_id(db=db, task_id=task_id)
-
-    if task.status in (TaskStatus.PROCESSING, TaskStatus.COMPLETED):
-        from fastapi import HTTPException
-        raise HTTPException(
-            status_code=400,
-            detail="进行中或已完成的任务不可删除，请先取消任务",
-        )
-
     detection_service.delete_task(db=db, task_id=task_id)
     return success_response(message="任务已删除")
 
