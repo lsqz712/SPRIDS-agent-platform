@@ -39,6 +39,7 @@
           <DetectionParams v-model="params" />
         </div>
 
+        <!-- 非 Camera：上传区 -->
         <div v-if="mode !== 'camera'" class="phro-module phro-module--grow">
           <h3 class="phro-module-title">上传</h3>
           <div class="phro-module-body">
@@ -78,6 +79,7 @@
           </div>
         </div>
 
+        <!-- Camera：控制面板 -->
         <div v-else class="phro-module phro-module--grow">
           <h3 class="phro-module-title">摄像头控制</h3>
           <div class="camera-ctrl-panel">
@@ -121,6 +123,7 @@
         </div>
       </aside>
 
+      <!-- ===== Camera 主面板 ===== -->
       <section v-if="mode === 'camera'" class="detection-main camera-layout">
         <div class="camera-preview-panel">
           <div class="camera-video-wrapper">
@@ -144,6 +147,7 @@
               </div>
             </div>
           </div>
+          <!-- 缺陷截图 -->
           <div v-if="camSnapshots.length" class="phro-module">
             <h3 class="phro-module-title">缺陷截图 ({{ camSnapshots.length }})</h3>
             <div class="cam-snapshot-list">
@@ -158,6 +162,7 @@
         </div>
       </section>
 
+      <!-- ===== 非 Camera 主面板 ===== -->
       <section v-else class="detection-main">
         <div class="phro-module phro-module--grow preview-card">
           <h3 class="phro-module-title">检测结果预览</h3>
@@ -182,6 +187,7 @@
       </section>
     </div>
 
+    <!-- 批量/视频结果概览（非 Camera） -->
     <div v-if="batchResults.length && mode !== 'camera'" class="phro-module batch-card">
       <h3 class="phro-module-title">
         {{ mode === 'video' ? '视频关键帧' : '批量结果概览' }} ({{ batchResults.length }})
@@ -217,7 +223,6 @@ import DetectionResultPanel from '@/components/detection/DetectionResultPanel.vu
 import { TASK_TYPES, PCB_SCENE } from '@/constants/pcbDefects'
 import { getScenesApi, detectSingleApi, detectBatchApi, detectZipApi, detectVideoApi, getVideoStatusApi } from '@/api/detection'
 import { createCameraWs } from '@/utils/cameraWs'
-import { createSingleTaskApi, createBatchTaskApi } from '@/api/tasks'
 
 const mode = ref('single')
 const loading = ref(false)
@@ -254,6 +259,7 @@ function setResult(imageUrl, detections, inferenceTime = 0) {
   }
 }
 
+// ── Single ──
 async function handleSingle(file) {
   loading.value = true
   batchResults.value = []
@@ -278,6 +284,7 @@ async function handleSingle(file) {
   }
 }
 
+// ── Batch ──
 async function handleBatch(files) {
   loading.value = true
   batchResults.value = []
@@ -326,6 +333,7 @@ function selectBatchItem(item) {
   setResult(item.imageUrl, item.detections)
 }
 
+// ── Video ──
 async function handleVideo(file) {
   loading.value = true
   videoProgress.value = 0
@@ -384,6 +392,7 @@ async function handleVideo(file) {
   }
 }
 
+// ── Camera（与本地 SPRIDS-team 一致）──
 const videoRef = ref(null)
 const cameraCanvasRef = ref(null)
 const cameraRunning = ref(false)
@@ -417,20 +426,24 @@ async function startCamera() {
     cameraWs = createCameraWs({
       mode: detectMode.value, conf: params.value.confThreshold, iou: params.value.iouThreshold,
       onResult: (d) => {
+        // 实时标注画面画在 camera canvas 上
         const img = new Image()
         img.onload = () => {
           const canvas = cameraCanvasRef.value
           if (!canvas) return
           canvas.width = img.width; canvas.height = img.height
           canvas.getContext('2d').drawImage(img, 0, 0)
+          // 响应驱动：收到结果后才发下一帧
           requestAnimationFrame(sendCameraFrame)
         }
         img.src = 'data:image/jpeg;base64,' + d.annotatedFrame
+        // 更新统计
         cameraFps.value = d.fps
         camFrameCount.value = d.frameCount
         camInferenceTime.value = d.inferenceTime
         camObjectCount.value = d.objectCount
         camDetections.value = d.detections || []
+        // 收集缺陷截图
         if (d.objectCount > 0 && camSnapshots.value.length < 10) {
           camSnapshots.value.push(d.annotatedFrame)
         }
@@ -514,6 +527,7 @@ onBeforeUnmount(() => { stopCamera() })
   gap: 6px;
 }
 
+// ── Camera 控制面板（左侧边栏）──
 .camera-ctrl-panel {
   display: flex;
   flex-direction: column;
@@ -589,6 +603,7 @@ onBeforeUnmount(() => { stopCamera() })
   gap: 4px;
 }
 
+// ── Camera 主面板（右侧）──
 .camera-layout {
   display: flex !important;
   gap: $phro-module-gap;
@@ -645,6 +660,7 @@ onBeforeUnmount(() => { stopCamera() })
   font-size: 13px;
 }
 
+// 统一 Element Plus tag 与 Phro 主题色
 .camera-result-panel {
   :deep(.el-tag) {
     background: rgba($phro-gold, 0.12);
@@ -715,6 +731,7 @@ onBeforeUnmount(() => { stopCamera() })
   border: 1px solid rgba($phro-gold, 0.2);
 }
 
+// ── 非 Camera 样式 ──
 .video-progress {
   margin-top: 12px;
 }

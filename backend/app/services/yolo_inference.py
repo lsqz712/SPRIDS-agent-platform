@@ -5,6 +5,7 @@ YOLO 推理服务
 from typing import Dict, Any, List, Optional
 from pathlib import Path
 import os
+import base64
 import cv2
 from ultralytics import YOLO
 from ultralytics.engine.results import Results
@@ -91,7 +92,13 @@ def detect(
             }
         
         result = results[0]
-        class_map = class_names or DEFAULT_CLASS_NAMES
+        # 优先用模型自身的类别名，其次传入的 class_names，最后回退到默认
+        if class_names:
+            class_map = class_names
+        elif hasattr(model, 'names') and model.names:
+            class_map = {int(k): {"name": v, "name_cn": v} for k, v in model.names.items()}
+        else:
+            class_map = DEFAULT_CLASS_NAMES
         
         defects = []
         for box in result.boxes:
@@ -113,15 +120,27 @@ def detect(
         
         image_shape = result.orig_shape
         inference_time = float(result.speed.get("inference", 0))
-        
+
+        # 生成原始图 base64（无框，给前端 BboxCanvas 自己画）
+        raw_img = cv2.imread(image_path)
+        _, raw_buf = cv2.imencode(".jpg", raw_img, [cv2.IMWRITE_JPEG_QUALITY, 85])
+        raw_base64 = base64.b64encode(raw_buf).decode("utf-8")
+
+        # 生成标注图 base64（保留供调试）
+        annotated_img = result.plot()
+        _, buf = cv2.imencode(".jpg", annotated_img, [cv2.IMWRITE_JPEG_QUALITY, 70])
+        annotated_base64 = base64.b64encode(buf).decode("utf-8")
+
         return {
             "success": True,
             "defects": defects,
             "inference_time": inference_time,
             "image_width": image_shape[1],
             "image_height": image_shape[0],
+            "raw_image_base64": raw_base64,
+            "annotated_image_base64": annotated_base64,
         }
-    
+
     except Exception as e:
         raise RuntimeError(f"检测失败: {str(e)}")
 
@@ -210,7 +229,13 @@ def detect_video_frame(
             }
         
         result = results[0]
-        class_map = class_names or DEFAULT_CLASS_NAMES
+        # 优先用模型自身的类别名，其次传入的 class_names，最后回退到默认
+        if class_names:
+            class_map = class_names
+        elif hasattr(model, 'names') and model.names:
+            class_map = {int(k): {"name": v, "name_cn": v} for k, v in model.names.items()}
+        else:
+            class_map = DEFAULT_CLASS_NAMES
         
         defects = []
         for box in result.boxes:

@@ -98,94 +98,97 @@
 
       <div class="feixun-window" @pointerdown="handleWindowDragStart">
       <aside class="feixun-sidebar">
-        <div class="sidebar-header">
-          <img :src="phrolova.avatar" alt="弗洛洛" class="sidebar-avatar" />
-          <div class="sidebar-title">
-            <span class="sidebar-name">弗洛洛</span>
-            <span class="sidebar-status">在线</span>
+        <div class="sidebar-panel">
+          <div class="sidebar-partner">
+            <img :src="phrolova.avatar" alt="弗洛洛" class="contact-avatar" />
+            <div class="sidebar-partner-info">
+              <span class="sidebar-partner-name">弗洛洛</span>
+              <span class="sidebar-partner-hint">历史对话</span>
+            </div>
           </div>
+
           <button
             type="button"
-            class="sidebar-new-btn"
+            class="phro-btn sidebar-new-chat"
+            :class="{ active: isNewChatActive }"
             :disabled="isLoading"
             @click="handleNewChat"
           >
-            <span class="plus-icon">+</span>
+            + 新对话
           </button>
-        </div>
 
-        <div ref="historyListRef" class="history-list">
-          <div
-            v-for="session in chatSessions"
-            :key="session.id"
-            class="history-item"
-            :class="{ active: isSessionActive(session.id) }"
-            :data-session-id="session.id"
-            @click="selectHistorySession(session.id)"
-          >
-            <div class="history-dot" :class="{ active: isSessionActive(session.id) }" />
-            <div class="history-content">
-              <input
-                v-if="editingSessionId === session.id"
-                v-model="editingTitle"
-                class="history-title-input"
-                maxlength="30"
-                @click.stop
-                @keydown.enter.stop="commitRenameSession(session)"
-                @keydown.esc.stop="cancelRenameSession"
-                @blur="handleRenameBlur(session)"
-              />
-              <span v-else class="history-title">{{ session.title }}</span>
-              <span class="history-preview">{{ session.preview }}</span>
-            </div>
-            <div class="history-meta">
-              <span class="history-time">{{ formatSessionTime(session.lastMessageAt ?? session.updatedAt) }}</span>
-              <div class="history-actions" @click.stop>
-                <button
-                  type="button"
-                  class="history-action-btn"
-                  @click.stop="startRenameSession(session)"
-                  title="重命名"
-                >
-                  <el-icon><EditPen /></el-icon>
-                </button>
-                <button
-                  type="button"
-                  class="history-action-btn danger"
-                  @click.stop="handleDeleteSession(session)"
-                  title="删除"
-                >
-                  <el-icon><Delete /></el-icon>
-                </button>
+          <div ref="historyListRef" class="history-list">
+            <div
+              v-for="session in chatSessions"
+              :key="session.id"
+              class="history-item"
+              :class="{ active: isSessionActive(session.id) }"
+              :data-session-id="session.id"
+            >
+              <div
+                class="history-item-body"
+                @click="selectHistorySession(session.id)"
+              >
+                <input
+                  v-if="editingSessionId === session.id"
+                  v-model="editingTitle"
+                  class="history-title-input"
+                  maxlength="30"
+                  @click.stop
+                  @keydown.enter.stop="commitRenameSession(session)"
+                  @keydown.esc.stop="cancelRenameSession"
+                  @blur="handleRenameBlur(session)"
+                />
+                <span v-else class="history-title">{{ session.title }}</span>
+                <span class="history-preview">{{ session.preview }}</span>
               </div>
+              <div class="history-item-side">
+                <span class="history-time">{{ formatSessionTime(session.lastMessageAt ?? session.updatedAt) }}</span>
+                <div class="history-item-actions">
+                  <el-tooltip content="重命名" effect="light" placement="top" popper-class="phro-tooltip" :show-after="300">
+                    <button
+                      type="button"
+                      class="history-action-btn"
+                      @mousedown.stop.prevent
+                      @click.stop="startRenameSession(session)"
+                    >
+                      <el-icon><EditPen /></el-icon>
+                    </button>
+                  </el-tooltip>
+                  <el-tooltip content="删除" effect="light" placement="top" popper-class="phro-tooltip phro-tooltip--danger" :show-after="300">
+                    <button
+                      type="button"
+                      class="history-action-btn danger"
+                      @mousedown.stop.prevent
+                      @click.stop="handleDeleteSession(session)"
+                    >
+                      <el-icon><Delete /></el-icon>
+                    </button>
+                  </el-tooltip>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="contact-notice">
+            <img src="/icons/3F_3F3F3F.webp" alt="" class="notice-icon" />
+            <div class="notice-text">
+              <span class="notice-name">弗洛洛</span>
+              <span class="notice-preview">共鸣联络频道已开启</span>
             </div>
           </div>
         </div>
       </aside>
 
-      <!-- 中间对话 -->
+      <!-- 右侧对话 -->
       <section class="feixun-main">
         <div class="chat-panel">
           <header class="chat-header">
-            <div class="chat-header-content">
-              <img :src="phrolova.avatar" alt="" class="chat-header-avatar" />
-              <div class="chat-header-info">
-                <span class="chat-header-name">{{ phrolova.name }}</span>
-                <span class="chat-header-status">智能检测助手</span>
-              </div>
-            </div>
-            <div class="chat-header-actions">
-              <button
-                type="button"
-                class="chat-header-action-btn"
-                :class="{ active: showDetectionPanel }"
-                @click="showDetectionPanel = !showDetectionPanel"
-                :title="showDetectionPanel ? '隐藏检测工作台' : '显示检测工作台'"
-              >
-                <svg viewBox="0 0 24 24" class="action-icon">
-                  <path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-5 14H7v-2h7v2zm3-4H7v-2h10v2zm0-4H7V7h10v2z"/>
-                </svg>
-              </button>
+            <h2 class="chat-partner">{{ phrolova.name }}</h2>
+            <div class="chat-quick-actions">
+              <button type="button" class="phro-btn quick-btn" :disabled="isLoading" @click="handleQuickDetect('single')">📷 单图检测</button>
+              <button type="button" class="phro-btn quick-btn" :disabled="isLoading" @click="handleQuickDetect('batch')">📁 批量/ZIP</button>
+              <button type="button" class="phro-btn quick-btn" :disabled="isLoading" @click="handleQuickDetect('video')">🎬 视频检测</button>
             </div>
           </header>
 
@@ -223,6 +226,42 @@
                     v-html="renderMarkdown(msg.content)"
                   />
                   <span v-else-if="isTypingBubble(msg, index)" class="typing-ellipsis">...</span>
+                  <!-- 检测结果卡片 -->
+                  <div v-if="msg.detectionResult" class="detection-result-card">
+                    <div v-if="msg.detectionResult.class_counts && Object.keys(msg.detectionResult.class_counts).length" class="dr-stats">
+                      <span v-for="(cnt, name) in msg.detectionResult.class_counts" :key="name" class="dr-tag">{{ name }}: {{ cnt }}</span>
+                    </div>
+                    <div class="dr-info">
+                      <span>目标: {{ msg.detectionResult.total_objects || 0 }}</span>
+                      <span v-if="msg.detectionResult.total_inference_time">耗时: {{ Math.round(msg.detectionResult.total_inference_time) }}ms</span>
+                      <span v-if="msg.detectionResult.processed_frames">关键帧: {{ msg.detectionResult.processed_frames }}</span>
+                    </div>
+                    <!-- 视频关键帧图 -->
+                    <div v-if="msg.detectionResult.key_frames?.length" class="dr-keyframes">
+                      <div v-for="(kf, ki) in msg.detectionResult.key_frames.filter(k => k.annotated_image_base64)" :key="ki" class="dr-kf-item">
+                        <img :src="'data:image/jpeg;base64,' + kf.annotated_image_base64" />
+                        <span>帧{{ kf.frame_index }} ({{ kf.object_count }}个)</span>
+                      </div>
+                    </div>
+                    <!-- 批量标注图 -->
+                    <div v-if="msg.detectionResult.annotated_images?.length" class="dr-images">
+                      <div v-for="(img, ii) in msg.detectionResult.annotated_images" :key="ii" class="dr-img-item">
+                        <img :src="'data:image/jpeg;base64,' + img.annotated_image_base64" />
+                        <span>{{ (img.image_path || '').split(/[\\/]/).pop() }}</span>
+                      </div>
+                    </div>
+                    <!-- 单图 -->
+                    <img v-if="msg.imageBase64" :src="'data:image/jpeg;base64,' + msg.imageBase64" class="dr-single-img" />
+                    <!-- 目标列表 + 坐标 -->
+                    <div v-if="msg.detectionResult.detections?.length" class="dr-detections">
+                      <div class="dr-det-title">检测目标 ({{ msg.detectionResult.detections.length }})</div>
+                      <div v-for="(det, di) in msg.detectionResult.detections.slice(0, 20)" :key="di" class="dr-det-row">
+                        <span class="dr-det-name">{{ det.class_name_cn || det.class_name }}</span>
+                        <span class="dr-det-conf">{{ (det.confidence * 100).toFixed(0) }}%</span>
+                        <span class="dr-det-bbox">[{{ (det.bbox || []).map(v => Math.round(v)).join(', ') }}]</span>
+                      </div>
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
@@ -230,9 +269,6 @@
             <div v-else class="msg-outgoing">
               <div class="msg-body">
                 <div class="msg-bubble outgoing">
-                  <div v-if="msg.image" class="msg-image">
-                    <img :src="msg.image" alt="上传的图片" />
-                  </div>
                   <div class="msg-text">{{ msg.content }}</div>
                 </div>
               </div>
@@ -260,7 +296,7 @@
             v-model="inputText"
             class="chat-input"
             rows="1"
-            placeholder="输入消息与弗洛洛对话..."
+            placeholder="输入消息…"
             :disabled="isLoading"
             @keydown.enter.exact.prevent="handleSend"
             @input="autoResize"
@@ -276,152 +312,6 @@
         </footer>
         </div>
       </section>
-
-      <!-- 右侧检测工作台 -->
-      <aside v-show="showDetectionPanel" class="feixun-detection-panel">
-        <div class="detection-panel-header">
-          <h3>检测工作台</h3>
-          <div class="detection-tabs">
-            <button
-              v-for="tab in TASK_TYPES"
-              :key="tab.key"
-              type="button"
-              class="detection-tab"
-              :class="{ active: detectionMode === tab.key }"
-              @click="detectionMode = tab.key"
-            >
-              {{ tab.label }}
-            </button>
-          </div>
-        </div>
-
-        <div class="detection-panel-body">
-          <div class="detection-section">
-            <h4 class="detection-section-title">检测场景</h4>
-            <p class="scene-name">{{ scene?.display_name || 'PCB SMT 缺陷检测' }}</p>
-            <div class="class-tags">
-              <span
-                v-for="name in scene?.class_names || defaultClasses"
-                :key="name"
-                class="phro-tag"
-              >
-                {{ classCn(name) }}
-              </span>
-            </div>
-          </div>
-
-          <div class="detection-section">
-            <h4 class="detection-section-title">检测参数</h4>
-            <DetectionParams v-model="detectionParams" />
-          </div>
-
-          <div class="detection-section detection-section--grow">
-            <h4 class="detection-section-title">上传</h4>
-            <ImageUploader
-              v-if="detectionMode === 'single'"
-              :disabled="detectionLoading"
-              title="上传单张 PCB 图像"
-              @select="handleSingleDetect"
-            />
-            <ImageUploader
-              v-else-if="detectionMode === 'batch'"
-              multiple
-              :disabled="detectionLoading"
-              title="批量上传 PCB 图像"
-              hint="可多选，支持 JPG / PNG / WEBP"
-              @select="handleBatchDetect"
-            />
-            <ImageUploader
-              v-else-if="detectionMode === 'video'"
-              accept="video/*"
-              :disabled="detectionLoading"
-              title="上传检测视频"
-              hint="支持 MP4 / WEBM"
-              @select="handleVideoDetect"
-            />
-            <div v-else class="camera-panel">
-              <div v-if="cameraDevices.length > 1" class="camera-select">
-                <label class="camera-select-label">选择摄像头：</label>
-                <select
-                  v-model="selectedCamera"
-                  class="camera-select-input"
-                  :disabled="cameraRunning"
-                >
-                  <option
-                    v-for="device in cameraDevices"
-                    :key="device.device_id"
-                    :value="device.device_id"
-                  >
-                    {{ device.name }} ({{ device.resolution }})
-                  </option>
-                </select>
-              </div>
-              <div v-if="cameraRunning" class="camera-video-container">
-                <video ref="videoRef" class="camera-video" autoplay playsinline muted />
-                <canvas ref="cameraCanvasRef" class="camera-overlay" />
-              </div>
-              <div class="camera-actions">
-                <button
-                  type="button"
-                  class="phro-btn phro-btn--primary"
-                  :disabled="cameraRunning"
-                  @click="startCamera"
-                >
-                  开启摄像头
-                </button>
-                <button
-                  type="button"
-                  class="phro-btn"
-                  :disabled="!cameraRunning"
-                  @click="stopCamera"
-                >
-                  停止
-                </button>
-              </div>
-            </div>
-            <el-progress
-              v-if="videoProgress > 0 && videoProgress < 100"
-              :percentage="videoProgress"
-              :stroke-width="8"
-              class="video-progress"
-            />
-          </div>
-        </div>
-
-        <div class="detection-result-panel">
-          <div class="result-preview">
-            <BboxCanvas
-              :image-src="previewImage"
-              :detections="currentDetections"
-              :active-index="activeDetection"
-            />
-          </div>
-          <div class="result-list-panel">
-            <DetectionResultPanel
-              :detections="currentDetections"
-              :active-index="activeDetection"
-              :summary="resultSummary"
-              @select="activeDetection = $event"
-            />
-          </div>
-        </div>
-
-        <div v-if="batchResults.length" class="batch-card">
-          <h4 class="batch-title">批量结果概览</h4>
-          <div class="batch-grid">
-            <div
-              v-for="(item, idx) in batchResults"
-              :key="idx"
-              class="batch-item"
-              @click="selectBatchItem(item)"
-            >
-              <img :src="item.imageUrl" :alt="item.name" />
-              <span>{{ item.name }}</span>
-              <span class="batch-count">{{ item.detections.length }} 个缺陷</span>
-            </div>
-          </div>
-        </div>
-      </aside>
       </div>
     </div>
 </template>
@@ -431,26 +321,13 @@ import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { showPhroConfirm } from '@/utils/phroMessageBox'
 import { Delete, EditPen } from '@element-plus/icons-vue'
+import { detectSingleApi, detectBatchApi, detectZipApi, detectVideoApi, getVideoStatusApi } from '@/api/detection'
+import request from '@/utils/request'
 import { useFeixunWindowsStore } from '@/stores/feixunWindows'
 import { sortSessions } from '@/stores/feixunWindowSessions'
 import { useUserStore } from '@/stores/user'
 import { renderMarkdown } from '@/utils/markdown'
 import { streamChat } from '@/utils/stream'
-import ImageUploader from '@/components/detection/ImageUploader.vue'
-import BboxCanvas from '@/components/detection/BboxCanvas.vue'
-import DetectionParams from '@/components/detection/DetectionParams.vue'
-import DetectionResultPanel from '@/components/detection/DetectionResultPanel.vue'
-import { TASK_TYPES, PCB_SCENE } from '@/constants/pcbDefects'
-import {
-  mockDetectSingle,
-  mockDetectBatch,
-  mockDetectVideo,
-  mockGenerateFrameDetections,
-  mockGetScenes,
-  withApiFallback,
-} from '@/services/spridsMock'
-import { getScenesApi, detectSingleApi, detectBatchApi, detectVideoApi, getCamerasApi } from '@/api/detection'
-
 import {
   buildChromeLayoutVars,
   computeEarBandPx,
@@ -458,7 +335,6 @@ import {
   computeShellOuterHeight,
   formatSliceViewBox,
   resolveChromeBaseSize,
-  CHROME_FALLBACK_BASE,
   CHROME_FRAME_PATH,
   CHROME_SLICE_TOP_LEFT,
   CHROME_SLICE_TOP_MID,
@@ -563,29 +439,6 @@ const isLoading = computed(() => windowRecord.value?.chat?.isLoading ?? false)
 const feixunWindowRef = ref(null)
 const inputText = ref('')
 const inputRef = ref(null)
-const imageInputRef = ref(null)
-const pendingImage = ref(null)
-const pendingImagePreview = ref(null)
-const detectionMode = ref('single')
-const detectionLoading = ref(false)
-const scene = ref(PCB_SCENE)
-const showDetectionPanel = ref(true)
-const detectionParams = ref({ confThreshold: 0.25, iouThreshold: 0.45 })
-const previewImage = ref('')
-const currentDetections = ref([])
-const activeDetection = ref(-1)
-const resultSummary = ref(null)
-const batchResults = ref([])
-const videoProgress = ref(0)
-const videoRef = ref(null)
-const cameraCanvasRef = ref(null)
-const cameraRunning = ref(false)
-const cameraDevices = ref([])
-const selectedCamera = ref(0)
-let cameraStream = null
-let cameraTimer = null
-const defaultClasses = PCB_SCENE.class_names
-
 const messageListRef = ref(null)
 const historyListRef = ref(null)
 const editingSessionId = ref(null)
@@ -745,7 +598,7 @@ const windowShellStyle = computed(() => {
         }
       : {
           width: '100%',
-          maxWidth: `${CHROME_FALLBACK_BASE.width}px`,
+          maxWidth: '960px',
           height: `calc(100% - ${WINDOW_VERTICAL_SLACK}px)`,
           maxHeight: `calc(100% - ${WINDOW_VERTICAL_SLACK}px)`,
         }
@@ -1558,7 +1411,6 @@ onMounted(() => {
     syncWindowLayoutMetrics()
   })
   window.addEventListener('resize', handleWindowLayoutResize)
-  loadScene()
 })
 
 onUnmounted(() => {
@@ -1569,7 +1421,6 @@ onUnmounted(() => {
   stopWindowDrag()
   stopWindowResize()
   window.removeEventListener('resize', handleWindowLayoutResize)
-  stopCamera()
 })
 
 function handleNewChat() {
@@ -1587,6 +1438,96 @@ function buildHistory() {
     role: msg.role,
     content: msg.content,
   }))
+}
+
+// ── 快捷检测按钮 ──
+function handleQuickDetect(type) {
+  const input = document.createElement('input')
+  input.type = 'file'
+  if (type === 'single') {
+    input.accept = 'image/*'
+  } else if (type === 'batch') {
+    input.accept = 'image/*,.zip'
+    input.multiple = true
+  } else if (type === 'video') {
+    input.accept = 'video/*'
+  }
+  input.onchange = async () => {
+    const files = Array.from(input.files || [])
+    if (!files.length) return
+    // 添加用户消息
+    const label = type === 'single' ? `[快捷检测] ${files[0].name}`
+      : type === 'video' ? `[快捷检测] 视频: ${files[0].name}`
+      : files.length === 1 ? `[快捷检测] ZIP: ${files[0].name}`
+      : `[快捷检测] ${files.length} 张图片`
+    messages.value.push({ role: 'user', content: label })
+    messages.value.push({ role: 'assistant', content: '', loading: true })
+    await nextTick(); scrollToBottom()
+    try {
+      if (type === 'single') {
+        const fd = new FormData(); fd.append('file', files[0]); fd.append('conf', '0.25')
+        const res = await detectSingleApi(fd)
+        const data = res.data || res
+        const defects = data.defects || data.results || []
+        const last = messages.value[messages.value.length - 1]
+        last.content = `检测完成！发现 ${data.total_objects || defects.length} 个目标。`
+        last.loading = false
+        if (data.raw_image_base64 || data.annotated_image_base64) {
+          last.imageBase64 = data.annotated_image_base64 || data.raw_image_base64
+        }
+        last.detectionResult = { total_objects: data.total_objects || defects.length,
+          class_counts: data.class_counts || {}, detections: defects }
+      } else if (type === 'batch') {
+        const isZip = files.length === 1 && files[0].name.endsWith('.zip')
+        const fd = new FormData()
+        if (isZip) { fd.append('file', files[0]) }
+        else { files.forEach(f => fd.append('files', f)) }
+        fd.append('conf', '0.25')
+        const api = isZip ? detectZipApi : detectBatchApi
+        const res = await api(fd)
+        const data = res.data || res
+        const results = data.results || []
+        const total = data.total_objects || results.reduce((s, r) => s + (r.defects || []).length, 0)
+        const last = messages.value[messages.value.length - 1]
+        last.content = `批量检测完成！共 ${total} 个目标。`
+        last.loading = false
+        last.detectionResult = { total_objects: total,
+          class_counts: data.class_counts || {}, detections: results.flatMap(r => r.defects || []),
+          annotated_images: results.filter(r => r.annotated_image_base64 || r.raw_image_base64).map(r => ({
+            image_path: r.image_path, annotated_image_base64: r.annotated_image_base64 || r.raw_image_base64 })) }
+      } else if (type === 'video') {
+        const fd = new FormData(); fd.append('file', files[0]); fd.append('conf', '0.25')
+        const taskRes = await detectVideoApi(fd)
+        const taskId = (taskRes.data || taskRes).task_id
+        if (!taskId) throw new Error('视频上传失败')
+        const last = messages.value[messages.value.length - 1]
+        last.content = '视频处理中...'
+        for (let i = 0; i < 120; i++) {
+          await new Promise(r => setTimeout(r, 2000))
+          try {
+            const st = await getVideoStatusApi(taskId)
+            const sd = st.data || st
+            if (sd.status === 'COMPLETED' || sd.status === 'completed') {
+              const result = sd.result || sd
+              last.content = `视频检测完成！${result.processed_frames || 0} 关键帧，${result.total_objects || 0} 个目标。`
+              last.loading = false
+              last.detectionResult = result
+              break
+            } else if (sd.status === 'FAILED' || sd.status === 'failed') {
+              last.content = '视频检测失败'
+              last.loading = false; break
+            }
+          } catch (e) { /* continue polling */ }
+        }
+        if (last.loading) { last.content = '视频处理超时'; last.loading = false }
+      }
+    } catch (e) {
+      const last = messages.value[messages.value.length - 1]
+      last.content = `检测失败: ${e.response?.data?.detail || e.message || '未知错误'}`
+      last.loading = false
+    }
+  }
+  input.click()
 }
 
 function handleSend() {
@@ -1682,439 +1623,6 @@ function handleSend() {
       },
     },
   )
-}
-
-async function uploadImage(file) {
-  const formData = new FormData()
-  formData.append('file', file)
-  
-  const token = localStorage.getItem('rsod_token')
-  const response = await fetch('/api/chat/upload', {
-    method: 'POST',
-    headers: {
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    },
-    body: formData,
-  })
-  
-  if (!response.ok) {
-    throw new Error('图片上传失败')
-  }
-  
-  return response.json()
-}
-
-function triggerImageUpload() {
-  imageInputRef.value?.click()
-}
-
-async function handleImageSelect(event) {
-  const file = event.target.files?.[0]
-  if (!file) return
-  
-  try {
-    pendingImage.value = file
-    pendingImagePreview.value = URL.createObjectURL(file)
-    inputText.value = '检测这张图片中的PCB缺陷'
-    ElMessage.success('图片已准备好，点击「检测」按钮开始')
-  } catch (e) {
-    ElMessage.error('图片处理失败')
-  }
-  
-  event.target.value = ''
-}
-
-async function handleDetect() {
-  if (!pendingImage.value || isLoading.value) return
-  
-  const chat = chatState()
-  if (!chat) return
-  
-  inputText.value = '检测这张图片中的PCB缺陷'
-  stickToBottom.value = true
-  dismissScrollToBottomBtn()
-  chat.messages.push({ role: 'user', content: '检测图片', image: pendingImagePreview.value })
-  touchSessionAfterUserSend()
-  chat.messages.push({ role: 'assistant', content: '' })
-  chat.isLoading = true
-  
-  try {
-    const uploadResult = await uploadImage(pendingImage.value)
-    const imagePath = uploadResult.image_path
-    
-    stopStream.value = streamChat(
-      '/api/chat/stream',
-      {
-        message: '检测这张图片中的PCB缺陷',
-        image_path: imagePath,
-        history: buildHistory().slice(0, -2),
-      },
-      {
-        onMessage: (data) => {
-          if (typeof data === 'string') {
-            const last = chat.messages[chat.messages.length - 1]
-            if (last?.role === 'assistant') {
-              last.content = (last.content || '') + data
-            }
-            return
-          }
-          if (data?.error) {
-            ElMessage.error(data.error)
-            const last = chat.messages[chat.messages.length - 1]
-            if (last?.role === 'assistant') {
-              last.content = `⚠ ${data.error}`
-            }
-            return
-          }
-          if (data?.content) {
-            const last = chat.messages[chat.messages.length - 1]
-            if (last?.role === 'assistant') {
-              last.content = (last.content || '') + data.content
-            }
-          }
-        },
-        onDone: () => {
-          chat.isLoading = false
-          stopStream.value = null
-          const last = chat.messages[chat.messages.length - 1]
-          if (last?.role === 'assistant' && !last.content.trim()) {
-            chat.messages.pop()
-          }
-          saveLocalSession({ refreshTime: true })
-          pendingImage.value = null
-          pendingImagePreview.value = null
-        },
-        onError: (err) => {
-          chat.isLoading = false
-          stopStream.value = null
-          ElMessage.error(err.message || '检测请求失败')
-          const last = chat.messages[chat.messages.length - 1]
-          if (last?.role === 'assistant' && !last.content.trim()) {
-            chat.messages.pop()
-          }
-          pendingImage.value = null
-          pendingImagePreview.value = null
-        },
-      },
-    )
-  } catch (e) {
-    chat.isLoading = false
-    ElMessage.error(e.message || '图片上传失败')
-    pendingImage.value = null
-    pendingImagePreview.value = null
-  }
-}
-
-function classCn(name) {
-  return PCB_SCENE.class_names_cn[name] || name
-}
-
-async function sendDetectionResultToChat(taskId, detections, file) {
-  const defectSummary = detections.map(d => 
-    `${classCn(d.class_name)} (置信度: ${(d.confidence * 100).toFixed(1)}%)`
-  ).join('、')
-
-  const messageText = `我刚检测了一张图片，任务ID: ${taskId}，发现了 ${detections.length} 个缺陷：${defectSummary}。请帮我分析这些缺陷。`
-
-  chat.messages.push({ role: 'user', content: messageText })
-  touchSessionAfterUserSend()
-  chat.messages.push({ role: 'assistant', content: '' })
-  chat.isLoading = true
-
-  try {
-    const uploadResult = await uploadImage(file)
-    const imagePath = uploadResult.image_path
-
-    stopStream.value = streamChat(
-      '/api/chat/stream',
-      {
-        message: messageText,
-        image_path: imagePath,
-        history: buildHistory().slice(0, -2),
-      },
-      {
-        onMessage: (data) => {
-          if (typeof data === 'string') {
-            const last = chat.messages[chat.messages.length - 1]
-            if (last?.role === 'assistant') {
-              last.content = (last.content || '') + data
-            }
-            return
-          }
-          if (data?.error) {
-            ElMessage.error(data.error)
-            const last = chat.messages[chat.messages.length - 1]
-            if (last?.role === 'assistant') {
-              last.content = `⚠ ${data.error}`
-            }
-            return
-          }
-          if (data?.content) {
-            const last = chat.messages[chat.messages.length - 1]
-            if (last?.role === 'assistant') {
-              last.content = (last.content || '') + data.content
-            }
-          }
-        },
-        onDone: () => {
-          chat.isLoading = false
-          stopStream.value = null
-          const last = chat.messages[chat.messages.length - 1]
-          if (last?.role === 'assistant' && !last.content.trim()) {
-            chat.messages.pop()
-          }
-          saveLocalSession({ refreshTime: true })
-        },
-        onError: (err) => {
-          chat.isLoading = false
-          stopStream.value = null
-          ElMessage.error(err.message || '分析请求失败')
-          const last = chat.messages[chat.messages.length - 1]
-          if (last?.role === 'assistant' && !last.content.trim()) {
-            chat.messages.pop()
-          }
-        },
-      },
-    )
-  } catch (e) {
-    chat.isLoading = false
-    ElMessage.error(e.message || '图片上传失败')
-    const last = chat.messages[chat.messages.length - 1]
-    if (last?.role === 'assistant' && !last.content.trim()) {
-      chat.messages.pop()
-    }
-  }
-}
-
-async function loadScene() {
-  scene.value = await withApiFallback(
-    async () => {
-      const res = await getScenesApi()
-      return Array.isArray(res?.data) ? res.data[0] : res?.[0]
-    },
-    () => mockGetScenes().then((s) => s[0]),
-  )
-}
-
-function setDetectionResult(imageUrl, detections, inferenceTime = 0) {
-  previewImage.value = imageUrl
-  currentDetections.value = detections
-  activeDetection.value = detections.length ? 0 : -1
-  resultSummary.value = {
-    totalObjects: detections.length,
-    inferenceTime: Math.round(inferenceTime || detections.reduce((s, d) => s + (d.inference_time || 0), 0)),
-  }
-}
-
-async function handleSingleDetect(file) {
-  detectionLoading.value = true
-  batchResults.value = []
-  try {
-    const detectFormData = new FormData()
-    detectFormData.append('file', file)
-    detectFormData.append('conf', detectionParams.value.confThreshold)
-    detectFormData.append('scene_id', scene.value.id || 1)
-
-    const res = await detectSingleApi(detectFormData)
-
-    const imageUrl = URL.createObjectURL(file)
-    const detections = (res.defects || []).map((d, i) => ({
-      id: Date.now() * 1000 + i,
-      task_id: res.task_id || null,
-      image_path: file.name,
-      annotated_image_url: imageUrl,
-      ...d,
-      inference_time: d.inference_time || 0,
-      image_width: res.image_width || 0,
-      image_height: res.image_height || 0,
-      created_at: new Date().toISOString(),
-    }))
-
-    setDetectionResult(imageUrl, detections, res.inference_time)
-
-    ElMessage.success(`检测完成，发现 ${detections.length} 个缺陷（任务ID: ${res.task_id}）`)
-
-    sendDetectionResultToChat(res.task_id, detections, file)
-  } catch (e) {
-    ElMessage.error(e.message || '检测失败')
-  } finally {
-    detectionLoading.value = false
-  }
-}
-
-async function handleBatchDetect(files) {
-  detectionLoading.value = true
-  try {
-    const detectFormData = new FormData()
-    files.forEach((f) => detectFormData.append('files', f))
-    detectFormData.append('conf', detectionParams.value.confThreshold)
-    detectFormData.append('scene_id', scene.value.id || 1)
-
-    const res = await detectBatchApi(detectFormData)
-
-    const grouped = {}
-    const fileMap = new Map(files.map((f, i) => [f.name, { file: f, index: i }]))
-
-    (res.results || []).forEach((r) => {
-      const imageName = r.image_path ? r.image_path.split(/[\\/]/).pop() : `image_${Date.now()}`
-      const fileInfo = fileMap.get(imageName) || files[0]
-      const imageUrl = fileInfo ? URL.createObjectURL(fileInfo.file) : ''
-
-      if (!grouped[imageName]) {
-        grouped[imageName] = {
-          name: imageName,
-          imageUrl: imageUrl,
-          detections: [],
-        }
-      }
-
-      (r.defects || []).forEach((d, i) => {
-        grouped[imageName].detections.push({
-          id: Date.now() * 1000 + grouped[imageName].detections.length,
-          task_id: res.task_id || null,
-          image_path: imageName,
-          annotated_image_url: imageUrl,
-          ...d,
-          inference_time: d.inference_time || r.inference_time || 0,
-          image_width: r.image_width || 0,
-          image_height: r.image_height || 0,
-          created_at: new Date().toISOString(),
-        })
-      })
-    })
-
-    batchResults.value = Object.values(grouped)
-    if (batchResults.value.length) {
-      selectBatchItem(batchResults.value[0])
-    }
-
-    const totalDetections = batchResults.value.reduce((sum, item) => sum + item.detections.length, 0)
-    ElMessage.success(`批量检测完成，共 ${totalDetections} 个缺陷（任务ID: ${res.task_id}）`)
-  } catch (e) {
-    ElMessage.error(e.message || '批量检测失败')
-  } finally {
-    detectionLoading.value = false
-  }
-}
-
-function selectBatchItem(item) {
-  setDetectionResult(item.imageUrl, item.detections)
-}
-
-async function handleVideoDetect(file) {
-  detectionLoading.value = true
-  videoProgress.value = 0
-  batchResults.value = []
-  try {
-    const formData = new FormData()
-    formData.append('file', file)
-    formData.append('conf', detectionParams.value.confThreshold)
-    formData.append('scene_id', scene.value.id || 1)
-    formData.append('frame_interval', 10)
-    
-    const res = await detectVideoApi(formData)
-    videoProgress.value = 100
-    currentDetections.value = res.results || []
-    previewImage.value = ''
-    resultSummary.value = {
-      totalObjects: res.total_objects || 0,
-      inferenceTime: res.total_inference_time || 0,
-    }
-    ElMessage.success(`视频检测完成：${file.name}，发现 ${res.total_objects || 0} 个缺陷`)
-  } catch (e) {
-    ElMessage.error(e.message || '视频检测失败')
-  } finally {
-    detectionLoading.value = false
-    setTimeout(() => { videoProgress.value = 0 }, 1500)
-  }
-}
-
-function drawCameraOverlay() {
-  const video = videoRef.value
-  const canvas = cameraCanvasRef.value
-  if (!video || !canvas || !cameraRunning.value) return
-
-  const w = video.videoWidth || 640
-  const h = video.videoHeight || 480
-  canvas.width = w
-  canvas.height = h
-  const ctx = canvas.getContext('2d')
-  ctx.clearRect(0, 0, w, h)
-
-  const detections = mockGenerateFrameDetections(w, h, detectionParams.value)
-  currentDetections.value = detections.map((d, i) => ({
-    ...d,
-    id: i,
-    inference_time: 16,
-  }))
-  resultSummary.value = {
-    totalObjects: detections.length,
-    inferenceTime: 16,
-  }
-
-  detections.forEach((det) => {
-    const [x1, y1, x2, y2] = det.bbox
-    ctx.strokeStyle = det.color || '#e74c3c'
-    ctx.lineWidth = 2
-    ctx.strokeRect(x1, y1, x2 - x1, y2 - y1)
-    const label = `${det.class_name_cn} ${(det.confidence * 100).toFixed(0)}%`
-    ctx.fillStyle = det.color || '#e74c3c'
-    ctx.fillRect(x1, Math.max(0, y1 - 18), ctx.measureText(label).width + 8, 18)
-    ctx.fillStyle = '#fff'
-    ctx.font = '12px sans-serif'
-    ctx.fillText(label, x1 + 4, Math.max(12, y1 - 5))
-  })
-}
-
-async function startCamera() {
-  try {
-    const constraints = cameraDevices.value.length > 0
-      ? { video: { deviceId: { exact: `camera-${selectedCamera.value}` } } }
-      : { video: true }
-    
-    cameraStream = await navigator.mediaDevices.getUserMedia(constraints)
-    videoRef.value.srcObject = cameraStream
-    cameraRunning.value = true
-    previewImage.value = ''
-    cameraTimer = setInterval(drawCameraOverlay, 500)
-    ElMessage.success('摄像头已开启')
-  } catch (e) {
-    ElMessage.error('无法访问摄像头，请检查权限或设备连接')
-  }
-}
-
-async function loadCameraDevices() {
-  try {
-    const res = await getCamerasApi()
-    cameraDevices.value = res?.devices || []
-    if (cameraDevices.value.length > 0) {
-      selectedCamera.value = cameraDevices.value[0].device_id
-    }
-  } catch {
-    cameraDevices.value = []
-  }
-}
-
-function stopCamera() {
-  cameraRunning.value = false
-  if (cameraTimer) {
-    clearInterval(cameraTimer)
-    cameraTimer = null
-  }
-  cameraStream?.getTracks().forEach((t) => t.stop())
-  cameraStream = null
-  if (videoRef.value) videoRef.value.srcObject = null
-  const canvas = cameraCanvasRef.value
-  canvas?.getContext('2d')?.clearRect(0, 0, canvas.width, canvas.height)
-}
-
-function onFeixunMounted() {
-  loadScene()
-  loadCameraDevices()
-}
-
-function onFeixunUnmounted() {
-  stopCamera()
 }
 </script>
 
@@ -2546,7 +2054,7 @@ $phro-ear-h-pct: calc(#{$phro-ear-h} / #{$phro-frame-h} * 100%);
   overflow: hidden;
   background: transparent;
   box-shadow: none;
-  cursor: grab;
+  cursor: default;
   touch-action: none;
   box-sizing: border-box;
   user-select: none;
@@ -2646,78 +2154,32 @@ $phro-ear-h-pct: calc(#{$phro-ear-h} / #{$phro-frame-h} * 100%);
 
 // ── 左侧历史对话 ──
 .feixun-sidebar {
-  flex: 0 0 240px;
-  width: 240px;
+  flex: 0 0 calc(#{$sidebar-ratio} * 100%);
+  width: calc(#{$sidebar-ratio} * 100%);
   flex-shrink: 0;
   display: flex;
   flex-direction: column;
   min-height: 0;
   overflow: hidden;
-  background: linear-gradient(180deg, rgba($phro-rose, 0.08) 0%, rgba($phro-cream, 0.05) 100%);
-  border-right: 1px solid rgba($phro-rose, 0.15);
 }
 
-.sidebar-header {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 12px 14px;
-  flex-shrink: 0;
-  background: rgba($phro-panel-bg, 0.8);
-  border-bottom: 1px solid rgba($phro-rose, 0.1);
+.sidebar-panel {
+  @include phro-panel-sections;
+  flex: 1;
+  cursor: default;
+  user-select: none;
+  -webkit-user-select: none;
 
-  .sidebar-avatar {
-    width: 36px;
-    height: 36px;
-    border-radius: 50%;
-    object-fit: cover;
-    border: 2px solid rgba($phro-gold, 0.3);
-  }
-
-  .sidebar-title {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-
-    .sidebar-name {
-      font-size: 14px;
-      font-weight: 600;
-      color: $phro-text-deep;
+  > .phro-btn {
+    &,
+    &:hover:not(:disabled):not(.active),
+    &:active:not(:disabled),
+    &.active,
+    &.active:hover {
+      background: $phro-btn-bg;
     }
 
-    .sidebar-status {
-      font-size: 11px;
-      color: $phro-gold;
-    }
-  }
-
-  .sidebar-new-btn {
-    width: 28px;
-    height: 28px;
-    border-radius: 50%;
-    border: 1px dashed rgba($phro-rose, 0.4);
-    background: rgba($phro-rose, 0.05);
-    color: $phro-rose;
-    font-size: 16px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    cursor: pointer;
-    transition: all 0.2s;
-
-    &:hover:not(:disabled) {
-      border-color: $phro-rose;
-      background: rgba($phro-rose, 0.1);
-    }
-
-    &:disabled {
-      opacity: 0.4;
-      cursor: not-allowed;
-    }
-
-    .plus-icon {
-      font-weight: 300;
-    }
+    @include phro-action-btn-states;
   }
 }
 
@@ -2731,6 +2193,22 @@ $phro-ear-h-pct: calc(#{$phro-ear-h} / #{$phro-frame-h} * 100%);
   transition: background 0.2s, color 0.2s, box-shadow 0.2s, border-color 0.2s;
   appearance: none;
   @include phro-action-btn-states;
+}
+
+.sidebar-partner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  flex-shrink: 0;
+
+  .contact-avatar {
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    object-fit: cover;
+    border: 2px solid rgba($phro-gold, 0.5);
+  }
 }
 
 .sidebar-partner-info {
@@ -2762,17 +2240,25 @@ $phro-ear-h-pct: calc(#{$phro-ear-h} / #{$phro-frame-h} * 100%);
 }
 
 .history-list {
+  @include phro-module-stack;
   flex: 1;
   min-height: 0;
   overflow-y: auto;
-  padding: 4px 8px;
+  padding: 0;
+  cursor: default;
+  user-select: none;
+  -webkit-user-select: none;
+
+  .history-item {
+    @include phro-module-box;
+  }
 
   &::-webkit-scrollbar {
-    width: 4px;
+    width: 3px;
   }
 
   &::-webkit-scrollbar-thumb {
-    background: rgba($phro-gold, 0.4);
+    background: rgba($phro-gold, 0.35);
     border-radius: 2px;
   }
 }
@@ -2780,55 +2266,42 @@ $phro-ear-h-pct: calc(#{$phro-ear-h} / #{$phro-frame-h} * 100%);
 .history-item {
   position: relative;
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 10px;
-  padding: 10px 12px;
-  margin-bottom: 4px;
-  border-radius: $phro-radius-sm;
-  background: rgba($phro-panel-bg, 0.6);
-  transition: all 0.2s ease;
-  cursor: pointer;
+  padding: 12px 14px 12px 18px;
+  transition: background 0.2s, box-shadow 0.2s, border-color 0.2s;
+  @include phro-interactive-surface;
 
-  &:hover {
-    background: rgba($phro-panel-bg, 0.9);
-    transform: translateX(2px);
+  &.active,
+  &.active:hover {
+    background: mix($phro-rose, mix($phro-cream, $phro-panel-bg, 32%), 14%);
+    border-color: rgba($phro-rose, 0.5);
+    box-shadow: none;
   }
 
   &.active {
-    background: rgba($phro-gold, 0.12);
-    box-shadow: 0 2px 8px rgba($phro-gold, 0.15);
-
-    .history-dot {
-      background: $phro-gold;
-      box-shadow: 0 0 6px rgba($phro-gold, 0.6);
-    }
-
     .history-title {
       font-weight: 600;
       color: $phro-text-deep;
     }
+
+    .history-preview,
+    .history-time {
+      color: $phro-text-mid;
+    }
   }
 }
 
-.history-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: rgba($phro-gold, 0.3);
-  flex-shrink: 0;
-  transition: all 0.2s;
-}
-
-.history-content {
-  flex: 1;
-  min-width: 0;
+.history-item-body {
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: 4px;
+  min-width: 0;
+  flex: 1;
 }
 
 .history-title {
-  font-size: 13px;
+  font-size: 14px;
   color: $phro-text-deep;
   white-space: nowrap;
   overflow: hidden;
@@ -2836,34 +2309,11 @@ $phro-ear-h-pct: calc(#{$phro-ear-h} / #{$phro-frame-h} * 100%);
 }
 
 .history-preview {
-  font-size: 11px;
+  font-size: 12px;
   color: $phro-text-mid;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-}
-
-.history-meta {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 4px;
-}
-
-.history-time {
-  font-size: 10px;
-  color: $phro-text-warm;
-}
-
-.history-actions {
-  display: flex;
-  gap: 4px;
-  opacity: 0;
-  transition: opacity 0.2s;
-
-  .history-item:hover & {
-    opacity: 1;
-  }
 }
 
 .history-item-side {
@@ -2995,83 +2445,179 @@ $phro-ear-h-pct: calc(#{$phro-ear-h} / #{$phro-frame-h} * 100%);
 }
 
 .chat-header {
-  padding: 12px 16px;
-  background: linear-gradient(180deg, rgba($phro-gold, 0.08) 0%, transparent 100%);
-  border-bottom: 1px solid rgba($phro-rose, 0.1);
+  padding: 16px 20px 14px;
   cursor: default;
 }
 
-.chat-header-content {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  flex: 1;
-}
-
-.chat-header-avatar {
-  width: 32px;
-  height: 32px;
-  border-radius: 50%;
-  object-fit: cover;
-  border: 2px solid rgba($phro-gold, 0.4);
-}
-
-.chat-header-info {
-  display: flex;
-  flex-direction: column;
-}
-
-.chat-header-name {
-  font-size: 15px;
+.chat-partner {
+  font-size: 18px;
   font-weight: 600;
   color: $phro-text-deep;
+  letter-spacing: 0.06em;
 }
 
-.chat-header-status {
+.chat-quick-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.quick-btn {
   font-size: 11px;
-  color: $phro-gold;
-}
-
-.chat-header-actions {
-  display: flex;
-  gap: 6px;
-}
-
-.chat-header-action-btn {
-  width: 28px;
-  height: 28px;
-  border-radius: 50%;
-  border: 1px solid rgba($phro-rose, 0.2);
-  background: rgba($phro-panel-bg, 0.5);
-  color: $phro-text-warm;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  padding: 4px 10px;
+  border-radius: 14px;
+  background: rgba($phro-gold, 0.1);
+  border: 1px solid rgba($phro-gold, 0.25);
+  color: $phro-text-deep;
   cursor: pointer;
   transition: all 0.2s;
 
-  &:hover {
+  &:hover:not(:disabled) {
+    background: rgba($phro-gold, 0.2);
     border-color: rgba($phro-gold, 0.5);
-    background: rgba($phro-gold, 0.1);
-    color: $phro-gold;
   }
 
-  &.active {
-    border-color: $phro-gold;
-    background: rgba($phro-gold, 0.15);
-    color: $phro-gold;
-    box-shadow: 0 0 8px rgba($phro-gold, 0.2);
-  }
-
-  .action-icon {
-    width: 16px;
-    height: 16px;
-    fill: currentColor;
+  &:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
   }
 }
 
+// 检测结果卡片（消息气泡内）
+.detection-result-card {
+  margin-top: 10px;
+  padding: 10px;
+  border-radius: 8px;
+  background: rgba($phro-rose, 0.06);
+  border: 1px solid rgba($phro-gold, 0.15);
+}
+
+.dr-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-bottom: 8px;
+}
+
+.dr-tag {
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 10px;
+  background: rgba($phro-gold, 0.15);
+  color: $phro-gold;
+}
+
+.dr-info {
+  display: flex;
+  gap: 12px;
+  font-size: 12px;
+  color: $phro-text-mid;
+  margin-bottom: 8px;
+}
+
+.dr-keyframes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.dr-kf-item {
+  width: 140px;
+  text-align: center;
+
+  img {
+    width: 100%;
+    height: 100px;
+    object-fit: cover;
+    border-radius: 4px;
+    border: 1px solid rgba($phro-gold, 0.2);
+  }
+
+  span {
+    font-size: 10px;
+    color: $phro-text-mid;
+    display: block;
+    margin-top: 2px;
+  }
+}
+
+.dr-images {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.dr-img-item {
+  width: 140px;
+  text-align: center;
+
+  img {
+    width: 100%;
+    height: 100px;
+    object-fit: cover;
+    border-radius: 4px;
+    border: 1px solid rgba($phro-gold, 0.2);
+  }
+
+  span {
+    font-size: 10px;
+    color: $phro-text-mid;
+    display: block;
+    margin-top: 2px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}
+
+.dr-single-img {
+  max-width: 100%;
+  max-height: 300px;
+  border-radius: 6px;
+  border: 1px solid rgba($phro-gold, 0.2);
+}
+
+.dr-detections {
+  margin-top: 8px;
+  border-top: 1px solid rgba($phro-gold, 0.1);
+  padding-top: 6px;
+}
+
+.dr-det-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: $phro-text-deep;
+  margin-bottom: 4px;
+}
+
+.dr-det-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 0;
+  font-size: 11px;
+  border-bottom: 1px solid rgba($phro-rose, 0.05);
+}
+
+.dr-det-name {
+  color: $phro-gold;
+  min-width: 60px;
+  font-weight: 500;
+}
+
+.dr-det-conf {
+  color: $phro-text-mid;
+  min-width: 36px;
+}
+
+.dr-det-bbox {
+  color: $phro-text-mid;
+  font-family: monospace;
+  font-size: 10px;
+}
+
 .chat-messages-container {
-  cursor: default;
 }
 
 .chat-messages {
@@ -3082,7 +2628,6 @@ $phro-ear-h-pct: calc(#{$phro-ear-h} / #{$phro-frame-h} * 100%);
   overflow-x: hidden;
   padding: 12px 16px;
   overscroll-behavior: contain;
-  cursor: default;
   touch-action: auto;
   user-select: text;
 
@@ -3345,17 +2890,15 @@ $msg-bubble-tail-top: 14px;
   align-items: flex-end;
   gap: 10px;
   padding: 12px 16px;
-  background: rgba($phro-panel-bg, 0.8);
-  border-top: 1px solid rgba($phro-rose, 0.1);
 }
 
 .chat-input {
   flex: 1;
-  min-height: 38px;
+  min-height: 36px;
   max-height: 100px;
-  padding: 10px 14px;
-  border: 1px solid rgba($phro-rose, 0.2);
-  border-radius: $phro-radius;
+  padding: 8px 12px;
+  border: 1px solid $phro-border;
+  border-radius: $phro-radius-sm;
   background: #fff;
   color: $text-dark;
   font-size: 14px;
@@ -3366,8 +2909,6 @@ $msg-bubble-tail-top: 14px;
   overflow-y: auto;
   scrollbar-width: none;
   -ms-overflow-style: none;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
-  transition: all 0.2s;
 
   &::-webkit-scrollbar {
     width: 0;
@@ -3376,12 +2917,11 @@ $msg-bubble-tail-top: 14px;
   }
 
   &::placeholder {
-    color: $phro-text-warm;
+    color: $phro-text-mid;
   }
 
   &:focus {
-    border-color: rgba($phro-gold, 0.6);
-    box-shadow: 0 0 0 3px rgba($phro-gold, 0.1), 0 2px 8px rgba($phro-gold, 0.15);
+    border-color: rgba($phro-rose, 0.55);
   }
 
   &:disabled {
@@ -3391,33 +2931,9 @@ $msg-bubble-tail-top: 14px;
 
 .send-btn {
   flex-shrink: 0;
-  height: 38px;
-  padding: 0 20px;
-  font-size: 14px;
-  font-weight: 500;
-  background: linear-gradient(135deg, rgba($phro-gold, 0.9) 0%, rgba($phro-rose, 0.8) 100%);
-  border-color: rgba($phro-gold, 0.4);
-  color: #fff;
-
-  &:hover:not(:disabled) {
-    background: linear-gradient(135deg, $phro-gold 0%, rgba($phro-rose, 0.9) 100%);
-    box-shadow: 0 2px 8px rgba($phro-gold, 0.3);
-  }
-
-  &:disabled {
-    opacity: 0.5;
-  }
-}
-.msg-image {
-  margin-bottom: 8px;
-  border-radius: $phro-radius-sm;
-  overflow: hidden;
-
-  img {
-    max-width: 200px;
-    max-height: 200px;
-    object-fit: contain;
-  }
+  height: 36px;
+  padding: 0 18px;
+  font-size: 13px;
 }
 
 :deep(.markdown-body) {
@@ -3446,308 +2962,5 @@ $msg-bubble-tail-top: 14px;
   50% {
     opacity: 1;
   }
-}
-
-.feixun-detection-panel {
-  width: 280px;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  padding: 10px;
-  border-left: 1px solid rgba($phro-rose, 0.2);
-  overflow: hidden;
-}
-
-.detection-panel-header {
-  h3 {
-    margin: 0 0 8px;
-    font-size: 14px;
-    font-weight: 600;
-    color: $phro-text-deep;
-  }
-}
-
-.detection-tabs {
-  display: flex;
-  gap: 4px;
-  background: rgba($phro-panel-bg, 0.8);
-  padding: 4px;
-  border-radius: $phro-radius-sm;
-}
-
-.detection-tab {
-  flex: 1;
-  padding: 6px 8px;
-  font-size: 11px;
-  color: $phro-text-mid;
-  background: transparent;
-  border: none;
-  border-radius: 4px;
-  cursor: pointer;
-  transition: all 0.2s;
-
-  &:hover {
-    color: $phro-text-deep;
-  }
-
-  &.active {
-    background: rgba($phro-gold, 0.15);
-    color: $phro-gold;
-    font-weight: 600;
-  }
-}
-
-.detection-panel-body {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  flex-shrink: 0;
-  overflow: hidden;
-}
-
-.detection-section {
-  @include phro-module-box;
-  padding: 8px;
-  border-radius: $phro-radius-sm;
-  background: rgba($phro-panel-bg, 0.85);
-  backdrop-filter: blur(8px);
-  border: 1px solid rgba($phro-gold, 0.15);
-  transition: all 0.3s ease;
-
-  &:hover {
-    border-color: rgba($phro-gold, 0.3);
-    box-shadow: 0 2px 12px rgba($phro-gold, 0.08);
-  }
-
-  &--grow {
-    flex-shrink: 0;
-    overflow: hidden;
-  }
-}
-
-.detection-section-title {
-  margin: 0 0 10px;
-  font-size: 12px;
-  font-weight: 600;
-  color: $phro-text-mid;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-
-  &::before {
-    content: '';
-    width: 4px;
-    height: 12px;
-    background: $phro-gold;
-    border-radius: 2px;
-  }
-}
-
-.scene-name {
-  font-size: 14px;
-  color: $phro-text-deep;
-  margin: 0 0 10px;
-  font-weight: 500;
-}
-
-.class-tags {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-
-.camera-panel {
-  position: relative;
-  border-radius: $phro-radius;
-  overflow: hidden;
-  background: rgba($phro-panel-bg, 0.9);
-  border: 1px solid rgba($phro-gold, 0.2);
-  display: flex;
-  flex-direction: column;
-  padding: 12px;
-}
-
-.camera-select {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 10px 12px;
-  background: rgba($phro-text-deep, 0.05);
-  border-radius: $phro-radius-sm;
-  border: 1px solid rgba($phro-gold, 0.1);
-  margin-bottom: 10px;
-
-  .camera-select-label {
-    font-size: 12px;
-    color: $phro-text-mid;
-    font-weight: 500;
-  }
-
-  .camera-select-input {
-    flex: 1;
-    padding: 6px 10px;
-    border: 1px solid rgba($phro-gold, 0.2);
-    border-radius: $phro-radius-sm;
-    background: rgba($phro-cream, 0.05);
-    font-size: 12px;
-    color: $phro-text-deep;
-    cursor: pointer;
-    transition: all 0.2s ease;
-
-    &:hover:not(:disabled) {
-      border-color: rgba($phro-gold, 0.4);
-    }
-
-    &:focus {
-      outline: none;
-      border-color: $phro-gold;
-      box-shadow: 0 0 0 2px rgba($phro-gold, 0.15);
-    }
-
-    &:disabled {
-      opacity: 0.5;
-      cursor: not-allowed;
-    }
-  }
-}
-
-.camera-video-container {
-  position: relative;
-  background: linear-gradient(145deg, rgba($phro-text-deep, 0.3), rgba($phro-text-deep, 0.5));
-  border-radius: $phro-radius-sm;
-  overflow: hidden;
-  margin-bottom: 10px;
-  border: 1px solid rgba($phro-gold, 0.1);
-}
-
-.camera-video,
-.camera-overlay {
-  width: 100%;
-  display: block;
-  max-height: 200px;
-  object-fit: contain;
-}
-
-.camera-overlay {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  pointer-events: none;
-}
-
-.camera-actions {
-  display: flex;
-  gap: 8px;
-
-  .phro-btn {
-    flex: 1;
-    padding: 8px 16px;
-    font-size: 12px;
-    font-weight: 500;
-    border-radius: $phro-radius-sm;
-    transition: all 0.2s ease;
-
-    &--primary {
-      background: linear-gradient(145deg, rgba($phro-gold, 0.25), rgba($phro-gold, 0.15));
-      border-color: rgba($phro-gold, 0.4);
-      color: $phro-gold;
-
-      &:hover:not(:disabled) {
-        background: linear-gradient(145deg, rgba($phro-gold, 0.35), rgba($phro-gold, 0.2));
-        box-shadow: 0 2px 8px rgba($phro-gold, 0.2);
-      }
-    }
-
-    &:not(&--primary):hover:not(:disabled) {
-      background: rgba($phro-gold, 0.1);
-      border-color: rgba($phro-gold, 0.3);
-    }
-
-    &:disabled {
-      opacity: 0.4;
-    }
-  }
-}
-
-.video-progress {
-  margin-top: 10px;
-}
-
-.detection-result-panel {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  flex: 1;
-  min-height: 0;
-}
-
-.result-preview {
-  height: 180px;
-  @include phro-module-box;
-  padding: 8px;
-  overflow: hidden;
-}
-
-.result-list-panel {
-  flex: 1;
-  min-height: 0;
-  @include phro-module-box;
-  padding: 8px;
-  overflow: hidden;
-}
-
-.batch-card {
-  @include phro-module-box;
-  padding: 10px;
-}
-
-.batch-title {
-  margin: 0 0 8px;
-  font-size: 12px;
-  font-weight: 600;
-  color: $phro-text-mid;
-}
-
-.batch-grid {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 6px;
-}
-
-.batch-item {
-  @include phro-module-box;
-  padding: 6px;
-  cursor: pointer;
-  text-align: center;
-  font-size: 11px;
-  color: $phro-text-deep;
-  transition: border-color 0.2s;
-
-  &:hover {
-    border-color: rgba($phro-gold, 0.55);
-  }
-
-  img {
-    width: 100%;
-    height: 50px;
-    object-fit: cover;
-    border-radius: 4px;
-    margin-bottom: 4px;
-  }
-
-  .batch-count {
-    display: block;
-    color: $phro-gold;
-    margin-top: 2px;
-  }
-}
-
-:deep(.bbox-canvas-wrap) {
-  height: 100%;
-}
-
-:deep(.result-panel) {
-  height: 100%;
 }
 </style>
