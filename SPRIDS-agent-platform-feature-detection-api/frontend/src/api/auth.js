@@ -1,25 +1,44 @@
 /**
- * 认证相关 API 接⼝
+ * 认证相关 API 接口
  */
 import request from '@/utils/request'
+
 /**
- * ⽤户注册
+ * 用户注册
  * @param {Object} data - { username, email, password }
  */
 export function registerApi(data) {
   return request.post('/auth/register', data)
 }
+
 /**
- * ⽤户登录
+ * 用户登录
  * @param {Object} data - { username, password }
  * @returns {Promise} - { access_token, token_type, user }
  */
 export function loginApi(data) {
   return request.post('/auth/login', data)
 }
+
 /**
- * 获取当前⽤户信息（需要 Token）
+ * 获取当前用户信息（需要 Token）
  */
 export function getUserInfoApi() {
   return request.get('/auth/me')
+}
+
+/**
+ * 更新当前用户资料
+ * @param {Object} data - { username?, email?, phone?, avatar? }
+ */
+export function updateProfileApi(data) {
+  return request.patch('/auth/me', data)
+}
+
+/**
+ * 修改密码
+ * @param {Object} data - { old_password, new_password }
+ */
+export function changePasswordApi(data) {
+  return request.post('/auth/change-password', data)
 }

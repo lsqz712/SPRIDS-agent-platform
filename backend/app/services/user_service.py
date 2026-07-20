@@ -6,7 +6,12 @@ import uuid
 from fastapi import HTTPException, UploadFile
 from sqlalchemy.orm import Session
 
-from app.core.security import create_access_token, hash_password, verify_password
+from app.core.security import (
+    create_access_token,
+    decode_access_token,
+    hash_password,
+    verify_password,
+)
 from app.entity.db_models import User
 from app.storage.minio_client import minio_client
 
@@ -104,6 +109,47 @@ class UserService:
     ) -> None:
         if not verify_password(old_password, user.hashed_password):
             raise HTTPException(status_code=400, detail="当前密码不正确")
+        user.hashed_password = hash_password(new_password)
+        db.commit()
+
+    @staticmethod
+    def get_user_by_email(db: Session, email: str) -> User | None:
+        """根据邮箱查找用户"""
+        return db.query(User).filter(User.email == email).first()
+
+    @staticmethod
+    def create_password_reset_token(user: User) -> str:
+        """生成密码重置令牌（15分钟有效）"""
+        from datetime import datetime, timedelta
+        payload = {
+            "sub": str(user.id),
+            "email": user.email,
+            "type": "password_reset",
+            "exp": datetime.utcnow() + timedelta(minutes=15),
+        }
+        from app.core.security import jwt
+        from app.config.settings import settings
+        return jwt.encode(payload, settings.JWT_SECRET_KEY, algorithm=settings.JWT_ALGORITHM)
+
+    @staticmethod
+    def verify_password_reset_token(token: str) -> dict:
+        """验证密码重置令牌，返回 payload"""
+        from jose import JWTError
+        from app.config.settings import settings
+        try:
+            payload = decode_access_token(token)
+            if payload.get("type") != "password_reset":
+                raise HTTPException(status_code=400, detail="无效的重置令牌")
+            return payload
+        except JWTError:
+            raise HTTPException(status_code=400, detail="重置令牌已过期或无效")
+
+    @staticmethod
+    def reset_password(db: Session, token: str, new_password: str) -> None:
+        """通过重置令牌重置密码"""
+        payload = UserService.verify_password_reset_token(token)
+        user_id = int(payload["sub"])
+        user = UserService.get_user_by_id(db, user_id)
         user.hashed_password = hash_password(new_password)
         db.commit()
 

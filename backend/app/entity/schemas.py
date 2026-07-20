@@ -63,6 +63,15 @@ class ChangePassword(BaseModel):
     """修改密码"""
     old_password: str = Field(..., description="旧密码")
     new_password: str = Field(..., min_length=6, max_length=100, description="新密码")
+
+class PasswordResetRequest(BaseModel):
+    """请求密码重置（通过邮箱）"""
+    email: str = Field(..., description="注册邮箱")
+
+class PasswordReset(BaseModel):
+    """重置密码"""
+    token: str = Field(..., description="重置令牌")
+    new_password: str = Field(..., min_length=6, max_length=100, description="新密码")
 #-- ⻆⾊权限 --
 class RoleResponse(BaseModel):
     """⻆⾊响应"""

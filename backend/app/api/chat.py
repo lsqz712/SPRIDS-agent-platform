@@ -41,7 +41,7 @@ logger = get_logger(__name__)
 
 router = APIRouter(prefix="/api/chat", tags=["智能对话"])
 
-UPLOAD_DIR = os.path.join(tempfile.gettempdir(), "rsod_uploads")
+UPLOAD_DIR = os.path.join(tempfile.gettempdir(), "sprids_uploads")
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 

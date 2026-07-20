@@ -20,15 +20,13 @@ class AgentCore:
         self.tool_registry = ToolRegistry()
         self._register_tools()
 
-    def _register_tools(self):
-        from app.agent.tools.detection_tool import register_detection_tools
-        from app.agent.tools.model_tool import register_model_tools
-        from app.agent.tools.analysis_tool import register_analysis_tools
-        from app.agent.tools.knowledge_tool import register_knowledge_tools
-        register_detection_tools(self.tool_registry, self.db)
-        register_model_tools(self.tool_registry, self.db)
-        register_analysis_tools(self.tool_registry, self.db)
-        register_knowledge_tools(self.tool_registry, self.db)
+        def _register_tools(self):
+            from app.agent.tools.model_tool import register_model_tools
+            from app.agent.tools.analysis_tool import register_analysis_tools
+            from app.agent.tools.knowledge_tool import register_knowledge_tools
+            register_model_tools(self.tool_registry, self.db)
+            register_analysis_tools(self.tool_registry, self.db)
+            register_knowledge_tools(self.tool_registry, self.db)
 
     def create_session(self, title: str = None) -> ChatSession:
         import uuid

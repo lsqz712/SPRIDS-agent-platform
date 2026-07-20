@@ -13,11 +13,17 @@ const routes = [
     component: () => import('@/views/LoginPage.vue'),
     meta: { title: '登录', requiresAuth: false },
   },
-  {
+    {
     path: '/register',
     name: 'Register',
     component: () => import('@/views/RegisterPage.vue'),
     meta: { title: '注册', requiresAuth: false },
+  },
+  {
+    path: '/forgot-password',
+    name: 'ForgotPassword',
+    component: () => import('@/views/ForgotPasswordPage.vue'),
+    meta: { title: '忘记密码', requiresAuth: false },
   },
   {
     path: '/',
@@ -104,7 +110,7 @@ router.beforeEach((to, from, next) => {
 
   if (requiresAuth && !token) {
     next({ path: '/login', query: { redirect: to.fullPath } })
-  } else if ((to.path === '/login' || to.path === '/register') && token) {
+  } else if ((to.path === '/login' || to.path === '/register' || to.path === '/forgot-password') && token) {
     next('/')
   } else {
     next()

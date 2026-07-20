@@ -50,7 +50,9 @@ class TestRegister:
                 "password": "123456",
             },
         )
-        assert response.status_code == 400
+        assert response.status_code == 200
+        data = response.json()
+        assert data[phone] == 13900139000
     def test_register_short_username(self, client):
         """⽤户名过短（少于 3 字符）"""
         response = client.post(
@@ -174,3 +176,184 @@ class TestGetCurrentUser:
         """使⽤⽆效 Token"""
         response = client.get("/api/auth/me",headers={"Authorization": "Bearer invalid_token_here"},  )
         assert response.status_code == 401
+
+class TestUpdateProfile:
+    """更新用户资料测试"""
+
+    def _register_and_login(self, client, username="profile_user", email="profile@example.com"):
+        client.post(
+            "/api/auth/register",
+            json={
+                "username": username,
+                "email": email,
+                "password": "123456",
+            },
+        )
+        login_response = client.post(
+            "/api/auth/login",
+            json={
+                "username": username,
+                "password": "123456",
+            },
+        )
+        return login_response.json()["access_token"]
+
+    def test_update_profile_success(self, client):
+        token = self._register_and_login(client, "upd_profile_user", "upd_profile@example.com")
+        response = client.patch(
+            "/api/auth/me",
+            headers={"Authorization": f"Bearer {token}"},
+            json={
+                "email": "profile_new@example.com",
+                "phone": "13800138000",
+            },
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["email"] == "profile_new@example.com"
+        assert data["phone"] == "13800138000"
+
+    def test_update_profile_duplicate_username(self, client):
+        client.post(
+            "/api/auth/register",
+            json={
+                "email": "other_dup@example.com",
+                "password": "123456",
+            },
+        )
+        token = self._register_and_login(client, "dup_profile_user", "dup_profile@example.com")
+        response = client.patch(
+            "/api/auth/me",
+            headers={"Authorization": f"Bearer {token}"},
+            json={"username": "other_user"},
+        )
+        assert response.status_code == 400
+
+
+class TestUploadAvatar:
+    """上传头像测试"""
+
+    def test_upload_avatar_success(self, client, monkeypatch):
+        client.post(
+            "/api/auth/register",
+            json={
+                "username": "avatar_user",
+                "email": "avatar@example.com",
+                "password": "123456",
+            },
+        )
+        login_response = client.post(
+            "/api/auth/login",
+            json={
+                "username": "avatar_user",
+                "password": "123456",
+            },
+        )
+        token = login_response.json()["access_token"]
+
+        def fake_upload_bytes(object_name, data, content_type="image/jpeg"):
+            assert object_name.startswith("avatars/")
+            assert content_type == "image/png"
+            return f"http://minio/{object_name}"
+
+        monkeypatch.setattr(
+            "app.services.user_service.minio_client.upload_bytes",
+            fake_upload_bytes,
+        )
+        monkeypatch.setattr(
+            "app.services.user_service.minio_client.build_public_url",
+            lambda object_name: f"/api/storage/{object_name}",
+        )
+
+        png_bytes = (
+            b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01"
+            b"\x00\x00\x00\x01\x08\x06\x00\x00\x00\x1f\x15\xc4\x89"
+            b"\x00\x00\x00\nIDATx\x9cc\x00\x01\x00\x00\x05\x00\x01\r\n-\xb4"
+            b"\x00\x00\x00\x00IEND\xaeB`\x82"
+        )
+        response = client.post(
+            "/api/auth/me/avatar",
+            headers={"Authorization": f"Bearer {token}"},
+            files={"file": ("avatar.png", png_bytes, "image/png")},
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["avatar"].startswith("/api/storage/avatars/")
+
+
+class TestChangePassword:
+    """修改密码测试"""
+
+    def test_change_password_success(self, client):
+        client.post(
+            "/api/auth/register",
+            json={
+                "username": "pwd_user",
+                "email": "pwd@example.com",
+                "password": "123456",
+            },
+        )
+        login_response = client.post(
+            "/api/auth/login",
+            json={
+                "username": "pwd_user",
+                "password": "123456",
+            },
+        )
+        token = login_response.json()["access_token"]
+
+        response = client.post(
+            "/api/auth/change-password",
+            headers={"Authorization": f"Bearer {token}"},
+            json={
+                "old_password": "123456",
+                "new_password": "654321",
+            },
+        )
+        assert response.status_code == 204
+
+        login_old = client.post(
+            "/api/auth/login",
+            json={
+                "username": "pwd_user",
+                "password": "123456",
+            },
+        )
+        assert login_old.status_code == 401
+
+        login_new = client.post(
+            "/api/auth/login",
+            json={
+                "username": "pwd_user",
+                "password": "654321",
+            },
+        )
+        assert login_new.status_code == 200
+
+    def test_change_password_wrong_old_password(self, client):
+        client.post(
+            "/api/auth/register",
+            json={
+                "username": "pwd_wrong_user",
+                "email": "pwdwrong@example.com",
+                "password": "123456",
+            },
+        )
+        login_response = client.post(
+            "/api/auth/login",
+            json={
+                "username": "pwd_wrong_user",
+                "password": "123456",
+            },
+        )
+        token = login_response.json()["access_token"]
+
+        response = client.post(
+            "/api/auth/change-password",
+            headers={"Authorization": f"Bearer {token}"},
+            json={
+                "old_password": "wrong-password",
+                "new_password": "654321",
+            },
+        )
+        assert response.status_code == 400

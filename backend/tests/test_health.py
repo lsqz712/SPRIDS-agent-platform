@@ -14,12 +14,14 @@ def test_health_check(client):
     assert data["code"] == 200
     assert data["message"] == "ok"
     assert data["data"]["status"] == "healthy"
-    assert data["data"]["app_name"] == "RSOD Agent Platform"
+    assert data["data"]["app_name"] == "SPRIDS Agent Platform"
     assert "version" in data["data"]
+
 def test_root(client):
-    """测试根路径欢迎接⼝"""
+    """测试根路径欢迎接口"""
     response = client.get("/")
     assert response.status_code == 200
+
     data = response.json()
     assert "message" in data
     assert "version" in data

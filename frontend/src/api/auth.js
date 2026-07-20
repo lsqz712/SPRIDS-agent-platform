@@ -44,6 +44,22 @@ export function changePasswordApi(data) {
 }
 
 /**
+ * 忘记密码 - 请求密码重置
+ * @param {Object} data - { email }
+ */
+export function forgotPasswordApi(data) {
+  return request.post('/auth/forgot-password', data)
+}
+
+/**
+ * 重置密码
+ * @param {Object} data - { token, new_password }
+ */
+export function resetPasswordApi(data) {
+  return request.post('/auth/reset-password', data)
+}
+
+/**
  * 上传当前用户头像
  * @param {File} file
  */

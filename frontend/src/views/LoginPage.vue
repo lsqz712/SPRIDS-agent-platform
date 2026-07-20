@@ -49,6 +49,10 @@
         </button>
       </el-form>
 
+            <div class="login-options">
+        <router-link to="/forgot-password" class="forgot-link">忘记密码？</router-link>
+      </div>
+
       <div class="login-footer">
         <span>还没有账号？</span>
         <router-link to="/register">立即注册</router-link>
@@ -223,6 +227,23 @@ function enterDevPreview() {
 
 .login-btn:disabled {
   @include phro-cursor.phro-cursor-not-allowed;
+}
+
+.login-options {
+  text-align: right;
+  margin-bottom: 16px;
+
+  .forgot-link {
+    font-size: 12px;
+    color: #d4bca8;
+    text-decoration: none;
+    text-shadow: 0 1px 4px rgba(40, 6, 16, 0.5);
+
+    &:hover {
+      color: #e8b86d;
+      text-decoration: underline;
+    }
+  }
 }
 
 .login-footer {

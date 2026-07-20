@@ -30,62 +30,31 @@ from langchain_openai import ChatOpenAI
 from app.config.settings import settings
 from app.core.logger import get_logger
 from app.database.session import SessionLocal
-from app.services.detection_service import detection_service
+from app.services import detection_service
 from app.services.statistics_service import statistics_service
 from app.services.defect_type_service import defect_type_service
 from app.entity.db_models import TrainingTask, DetectionScene, PCBBatch
 from app.agent.memory import conversation_memory
 
+
+# 检测工具从 tools/detection_tool 导入
+from app.agent.tools.detection_tool import (
+    detect_single_image,
+    detect_batch_images,
+    detect_zip_images_file,
+    detect_video_file,
+)
+
 logger = get_logger(__name__)
 
 
-@tool
-def detect_single_image(image_path: str, conf: float = 0.25, iou: float = 0.45) -> str:
-    """
-    检测单张图片中的目标物体。
-
-    Args:
-        image_path: 图片文件路径或 URL
-        conf: 置信度阈值，默认 0.25
-        iou: NMS IoU 阈值，默认 0.45
-
-    Returns:
-        JSON 字符串，包含检测结果（目标数量、类别统计、标注图路径）
-    """
-    result = detection_service.detect_single(image_path, conf=conf, iou=iou)
-    return json.dumps(result, ensure_ascii=False)
-
-
-@tool
-def detect_batch_images(image_paths: list[str], conf: float = 0.25) -> str:
-    """
-    批量检测多张图片中的目标物体。
-
-    Args:
-        image_paths: 图片文件路径列表
-        conf: 置信度阈值，默认 0.25
-
-    Returns:
-        JSON 字符串，包含每张图片的检测结果汇总
-    """
-    result = detection_service.detect_batch(image_paths, conf=conf)
-    return json.dumps(result, ensure_ascii=False)
-
-
-@tool
-def detect_zip_images_file(zip_path: str, conf: float = 0.25) -> str:
-    """
-    解压 ZIP 文件并批量检测其中所有图片的目标物体。
-
-    Args:
-        zip_path: ZIP 文件路径
-        conf: 置信度阈值，默认 0.25
-
-    Returns:
-        JSON 字符串，包含 ZIP 内所有图片的检测结果汇总
-    """
-    result = detection_service.detect_zip(zip_path, conf=conf)
-    return json.dumps(result, ensure_ascii=False)
+# 检测工具从 tools/detection_tool 导入
+from app.agent.tools.detection_tool import (
+    detect_single_image,
+    detect_batch_images,
+    detect_zip_images_file,
+    detect_video_file,
+)
 
 
 @tool
@@ -404,6 +373,7 @@ DETECTION_TOOLS = [
     detect_single_image,
     detect_batch_images,
     detect_zip_images_file,
+    detect_video_file,
     get_statistics_overview,
     get_defect_types,
     get_task_list,

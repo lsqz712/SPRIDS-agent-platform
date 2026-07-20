@@ -12,6 +12,8 @@ from app.core.security import decode_access_token
 from app.database.session import get_db
 from app.entity.schemas import (
     ChangePassword,
+    PasswordReset,
+    PasswordResetRequest,
     TokenResponse,
     UserLogin,
     UserRegister,
@@ -120,8 +122,13 @@ async def update_current_user_info(
     current_user=Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
+    import logging
+    logger = logging.getLogger(__name__)
     payload = request.model_dump(exclude_unset=True)
+    logger.info("=== PATCH /me payload: %s, username in payload: %s", payload, "username" in payload)
+    logger.info("=== current_user username before update: %s, id: %s", current_user.username, current_user.id)
     user = user_service.update_profile(db, current_user, payload)
+    logger.info("=== user.username after update: %s", user.username)
     roles = user_service.get_user_roles(db, user)
     return serialize_user(user, roles)
 
@@ -138,6 +145,43 @@ async def change_current_user_password(
         request.old_password,
         request.new_password,
     )
+
+
+@router.post("/forgot-password")
+async def forgot_password(
+    request: PasswordResetRequest,
+    db: Session = Depends(get_db),
+):
+    """
+    忘记密码 - 请求重置链接
+    验证邮箱是否存在，生成重置令牌（模拟发送邮件）
+    """
+    user = user_service.get_user_by_email(db, request.email)
+    if not user:
+        # 为安全起见，即使用户不存在也返回成功（防止邮箱枚举）
+        return {"message": "如果该邮箱已注册，重置链接已发送至您的邮箱"}
+
+    token = user_service.create_password_reset_token(user)
+
+    # 由于未配置邮件服务，直接返回令牌
+    # 生产环境中应通过邮件发送此令牌
+    return {
+        "message": "如果该邮箱已注册，重置链接已发送至您的邮箱",
+        "reset_token": token,
+        "expires_in": 900,
+    }
+
+
+@router.post("/reset-password")
+async def reset_password(
+    request: PasswordReset,
+    db: Session = Depends(get_db),
+):
+    """
+    重置密码 - 使用重置令牌设置新密码
+    """
+    user_service.reset_password(db, request.token, request.new_password)
+    return {"message": "密码重置成功，请使用新密码登录"}
 
 
 @router.post("/me/avatar", response_model=UserResponse)

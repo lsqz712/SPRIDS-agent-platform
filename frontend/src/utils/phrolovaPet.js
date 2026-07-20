@@ -235,7 +235,7 @@ export async function createPhrolovaPetStage(container, options = {}) {
 
   const [PIXI, live2d] = await Promise.all([
     import('pixi.js'),
-    import('pixi-live2d-display/cubism4'),
+    import('pixi-live2d-display/lib/cubism4'),
   ])
 
   const { Live2DModel, config: live2dConfig, MotionPriority } = live2d
