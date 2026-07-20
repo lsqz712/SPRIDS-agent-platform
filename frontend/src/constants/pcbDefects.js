@@ -35,6 +35,7 @@ export const DEFECT_COLORS = {
 export const TASK_TYPES = [
   { key: 'single', label: '单图检测' },
   { key: 'batch', label: '批量检测' },
+  { key: 'zip', label: 'ZIP 检测' },
   { key: 'video', label: '视频检测' },
   { key: 'camera', label: '摄像头' },
 ]
