@@ -97,3 +97,24 @@ async def get_chat_user(
         return ChatUser(user_id=user.id, username=user.username)
     except (JWTError, ValueError) as exc:
         raise credentials_exception from exc
+
+
+def check_permission(permission_code: str = None):
+    """权限校验依赖工厂 — 用法: Depends(check_permission("role:read"))"""
+    from fastapi import Depends, HTTPException
+    from app.database.session import get_db
+    from app.entity.db_models import User
+    from app.services.role_service import user_role_service
+
+    async def _check(
+        db=Depends(get_db),
+        current_user=Depends(get_current_user),
+    ):
+        if permission_code is None:
+            return True
+        if current_user.is_superuser:
+            return True
+        if not user_role_service.has_permission(db, current_user.id, permission_code):
+            raise HTTPException(status_code=403, detail=f"缺少权限: {permission_code}")
+        return True
+    return _check
