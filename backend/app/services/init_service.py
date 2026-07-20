@@ -167,19 +167,28 @@ class InitService:
     @staticmethod
     def init_all(db: Session) -> dict:
         result = {}
-        
+
+        # 一键修复：存量用户自动审批
+        from sqlalchemy import update
+        fixed = db.execute(
+            update(User).where(User.is_approved == False).values(is_approved=True)
+        ).rowcount
+        if fixed:
+            db.commit()
+            result["existing_users_approved"] = fixed
+
         perm_count = InitService.init_permissions(db)
         result["permissions_created"] = perm_count
-        
+
         role_count = InitService.init_roles(db)
         result["roles_created"] = role_count
-        
+
         rp_count = InitService.init_role_permissions(db)
         result["role_permissions_created"] = rp_count
-        
+
         admin_created = InitService.init_default_admin(db)
         result["admin_created"] = admin_created
-        
+
         return result
 
     @staticmethod
