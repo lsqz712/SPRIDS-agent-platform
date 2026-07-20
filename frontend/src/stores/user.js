@@ -12,7 +12,7 @@ const USER_KEY = 'rsod_user'
 export const useUserStore = defineStore('user', {
   state: () => ({
     token: localStorage.getItem(TOKEN_KEY) || '',
-    user: JSON.parse(localStorage.getItem(USER_KEY) || 'null'),
+    user: (() => { try { return JSON.parse(localStorage.getItem(USER_KEY) || 'null') } catch { return null } })(),
   }),
 
   getters: {
@@ -30,19 +30,23 @@ export const useUserStore = defineStore('user', {
   actions: {
     async login(credentials) {
       const res = await loginApi(credentials)
+      // 兼容 success_response 包装：{code, data: {access_token, user}, message}
+      const data = res.data || res
 
-      this.token = res.access_token
-      localStorage.setItem(TOKEN_KEY, res.access_token)
+      this.token = data.access_token
+      localStorage.setItem(TOKEN_KEY, data.access_token)
 
-      this.user = res.user
-      localStorage.setItem(USER_KEY, JSON.stringify(res.user))
+      this.user = data.user
+      localStorage.setItem(USER_KEY, JSON.stringify(data.user))
 
       return res
     },
 
     async fetchUserInfo() {
       try {
-        const user = await getUserInfoApi()
+        const res = await getUserInfoApi()
+        // 兼容 success_response 包装
+        const user = res.data || res
         this.user = user
         localStorage.setItem(USER_KEY, JSON.stringify(user))
       } catch {
@@ -56,7 +60,8 @@ export const useUserStore = defineStore('user', {
         localStorage.setItem(USER_KEY, JSON.stringify(this.user))
         return this.user
       }
-      const user = await updateProfileApi(data)
+      const res = await updateProfileApi(data)
+      const user = res.data || res
       this.user = user
       localStorage.setItem(USER_KEY, JSON.stringify(this.user))
       return user
@@ -76,7 +81,8 @@ export const useUserStore = defineStore('user', {
         localStorage.setItem(USER_KEY, JSON.stringify(this.user))
         return this.user
       }
-      const user = await uploadAvatarApi(file)
+      const res = await uploadAvatarApi(file)
+      const user = res.data || res
       this.user = user
       localStorage.setItem(USER_KEY, JSON.stringify(this.user))
       return user

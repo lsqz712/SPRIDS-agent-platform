@@ -70,17 +70,17 @@ class SupervisorAgent:
         try:
             result = await self.chain.ainvoke({"input": message})
             route = result.content.strip().lower()
-            
+
             valid_routes = {"detection", "analysis", "knowledge", "model"}
             if route not in valid_routes:
                 logger.warning(f"无效路由 '{route}'，使用默认 detection")
                 return "detection"
-            
+
             logger.info(f"路由决策: '{message[:50]}' → {route}")
             return route
         except Exception as e:
-            logger.error(f"路由决策失败: {e}")
-            return "detection"
+            logger.warning(f"LLM 路由失败（降级到规则匹配）: {e}")
+            return self._rule_based_route(message)
 
     def _rule_based_route(self, message: str) -> str:
         """基于规则的路由（模拟模式）"""

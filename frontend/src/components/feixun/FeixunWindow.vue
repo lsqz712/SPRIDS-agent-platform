@@ -205,6 +205,14 @@
             <div v-if="msg.role === 'assistant'" class="msg-incoming">
               <img :src="phrolova.avatar" alt="" class="msg-avatar" />
               <div class="msg-body">
+                <div v-if="msg.routeAgent" class="msg-route-badge">
+                  {{ routeLabel(msg.routeAgent) }}
+                </div>
+                <div v-if="msg.toolCall" class="msg-tool-call">
+                  <span class="tool-call-icon">⚙</span>
+                  <span class="tool-call-name">{{ msg.toolCall.tool }}</span>
+                  <span class="tool-call-input">{{ toolInputPreview(msg.toolCall.input) }}</span>
+                </div>
                 <div
                   class="msg-bubble incoming"
                   :class="{ typing: isTypingBubble(msg, index) }"
@@ -1311,6 +1319,17 @@ function isTypingBubble(msg, index) {
   )
 }
 
+function routeLabel(route) {
+  const labels = { detection: '🔍 检测', analysis: '📊 分析', knowledge: '📚 知识', model: '🤖 模型' }
+  return labels[route] || route
+}
+
+function toolInputPreview(input) {
+  if (!input) return ''
+  const str = typeof input === 'string' ? input : JSON.stringify(input)
+  return str.length > 60 ? str.slice(0, 60) + '…' : str
+}
+
 function formatSessionTime(timestamp) {
   if (!timestamp) return ''
   const date = new Date(timestamp)
@@ -1597,25 +1616,51 @@ function handleSend() {
       onMessage: (data) => {
         if (typeof data === 'string') {
           const last = chat.messages[chat.messages.length - 1]
-          if (last?.role === 'assistant') {
-            last.content = (last.content || '') + data
-          }
+          if (last?.role === 'assistant') last.content = (last.content || '') + data
           return
         }
-        if (data?.error) {
-          ElMessage.error(data.error)
-          const last = chat.messages[chat.messages.length - 1]
-          if (last?.role === 'assistant') {
-            last.content = `⚠ ${data.error}`
+        const last = chat.messages[chat.messages.length - 1]
+        if (!last || last.role !== 'assistant') return
+
+        switch (data.type) {
+          case 'route': {
+            // 显示路由信息
+            last.routeAgent = data.content
+            break
           }
-          return
-        }
-        if (data?.content) {
-          const last = chat.messages[chat.messages.length - 1]
-          if (last?.role === 'assistant') {
-            last.content = (last.content || '') + data.content
+          case 'text_chunk': {
+            // 流式文本追加
+            if (data.content) last.content = (last.content || '') + data.content
+            break
+          }
+          case 'tool_call': {
+            // 工具调用中
+            last.toolCall = { tool: data.tool, input: data.input }
+            break
+          }
+          case 'tool_result': {
+            // 工具调用完成
+            last.toolCall = null
+            // 如果是检测结果，解析并渲染卡片
+            try {
+              const result = typeof data.result === 'string' ? JSON.parse(data.result) : data.result
+              if (result && (result.total_objects !== undefined || result.task_id)) {
+                last.detectionResult = result
+              }
+            } catch {}
+            break
+          }
+          case 'error': {
+            ElMessage.error(data.content)
+            last.content = (last.content || '') + `\n⚠ ${data.content}`
+            break
+          }
+          default: {
+            // 兼容旧格式：直接 content 字段
+            if (data.content) last.content = (last.content || '') + data.content
           }
         }
+        last.loading = false
       },
       onDone: () => {
         chat.isLoading = false
@@ -3147,6 +3192,55 @@ $msg-bubble-tail-top: 14px;
       background: $phro-panel-bg;
     }
   }
+}
+
+.msg-route-badge {
+  font-size: 10px;
+  color: $phro-gold;
+  padding: 1px 8px;
+  border-radius: 10px;
+  background: rgba($phro-gold, 0.1);
+  border: 1px solid rgba($phro-gold, 0.2);
+  display: inline-block;
+  width: fit-content;
+  margin-bottom: 2px;
+}
+
+.msg-tool-call {
+  font-size: 11px;
+  color: $phro-text-mid;
+  padding: 3px 10px;
+  border-radius: 6px;
+  background: rgba($phro-rose, 0.08);
+  border: 1px solid rgba($phro-rose, 0.15);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: fit-content;
+  margin-bottom: 2px;
+}
+
+.tool-call-icon {
+  font-size: 12px;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.tool-call-name {
+  font-weight: 600;
+  color: $phro-text-deep;
+}
+
+.tool-call-input {
+  color: $phro-text-mid;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 200px;
 }
 
 .msg-body {

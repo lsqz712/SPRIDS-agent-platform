@@ -49,6 +49,11 @@
           <el-table-column label="创建时间" min-width="160">
             <template #default="{ row }">{{ formatTime(row.created_at) }}</template>
           </el-table-column>
+          <el-table-column label="操作" width="80" fixed="right">
+            <template #default="{ row }">
+              <button type="button" class="phro-btn delete-btn" @click.stop="handleDelete(row)">删除</button>
+            </template>
+          </el-table-column>
         </el-table>
       </div>
 
@@ -102,6 +107,7 @@
 
 <script setup>
 import { ref, reactive, onMounted } from 'vue'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import PhroPageShell from '@/components/layout/PhroPageShell.vue'
 import { TASK_TYPES, TASK_STATUS_MAP } from '@/constants/pcbDefects'
 import {
@@ -109,7 +115,7 @@ import {
   mockGetTaskDetail,
   withApiFallback,
 } from '@/services/spridsMock'
-import { getHistoryRecordsApi } from '@/api/history'
+import { getHistoryRecordsApi, deleteRecordApi } from '@/api/history'
 import { getTaskDetailApi } from '@/api/detection'
 
 const loading = ref(false)
@@ -179,6 +185,23 @@ async function openDetail(row) {
     () => mockGetTaskDetail(row.id),
   )
   drawerVisible.value = true
+}
+
+async function handleDelete(row) {
+  try {
+    await ElMessageBox.confirm(`确认删除任务 #${row.id}？关联的检测结果也会被删除。`, '删除确认', {
+      confirmButtonText: '删除',
+      cancelButtonText: '取消',
+      type: 'warning',
+    })
+    try {
+      await deleteRecordApi(row.id)
+      ElMessage.success(`任务 #${row.id} 已删除`)
+      loadRecords()
+    } catch (e) {
+      ElMessage.error('删除失败: ' + (e.response?.data?.detail || e.message))
+    }
+  } catch { /* 用户取消 */ }
 }
 
 onMounted(loadRecords)

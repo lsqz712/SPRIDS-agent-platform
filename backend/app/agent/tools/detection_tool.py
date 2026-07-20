@@ -260,7 +260,59 @@ class TaskListTool(BaseTool):
             "total_pages": (total + page_size - 1) // page_size,
             "tasks": task_list,
         }
+
+class DetectVideoFileTool(BaseTool):
+    """视频文件检测工具"""
+    def __init__(self, db: Session):
+        self.db = db
+
+    def get_name(self) -> str:
+        return "detect_video_file"
+
+    def get_description(self) -> str:
+        return "对视频文件执行 PCB 缺陷检测，异步处理并返回进度"
+
+    def get_parameters(self) -> Dict[str, Any]:
+        return {
+            "type": "object",
+            "properties": {
+                "video_path": {"type": "string", "description": "视频文件路径"},
+                "scene_id": {"type": "integer", "description": "检测场景 ID，默认 1"},
+                "conf_threshold": {"type": "number", "description": "置信度阈值，默认 0.25"},
+                "frame_sample_rate": {"type": "integer", "description": "帧采样间隔，默认 5"},
+                "max_frames": {"type": "integer", "description": "最多关键帧数，默认 50"},
+            },
+            "required": ["video_path"],
+        }
+
+    def execute(self, **kwargs) -> Dict[str, Any]:
+        video_path = kwargs.get("video_path")
+        scene_id = kwargs.get("scene_id", 1)
+        conf_threshold = kwargs.get("conf_threshold", 0.25)
+        frame_sample_rate = kwargs.get("frame_sample_rate", 5)
+        max_frames = kwargs.get("max_frames", 50)
+
+        from app.services.detection_service import detection_service
+        result = detection_service.detect_video(
+            video_path=video_path, conf=conf_threshold,
+            frame_sample_rate=frame_sample_rate, max_frames=max_frames,
+            scene_id=scene_id, user_id=1,
+        )
+        if "error" in result:
+            return {"error": result["error"]}
+        return {
+            "task_id": result["task_id"], "total_frames": result["total_frames"],
+            "processed_frames": result["processed_frames"], "fps": result["fps"],
+            "duration_seconds": result["duration_seconds"],
+            "total_objects": result["total_objects"],
+            "class_counts": result["class_counts"],
+            "total_inference_time": result["total_inference_time"],
+            "success": True,
+        }
+
+
 def register_detection_tools(registry: ToolRegistry, db: Session):
     registry.register(DetectionTool(db))
     registry.register(DetectionResultTool(db))
     registry.register(TaskListTool(db))
+    registry.register(DetectVideoFileTool(db))

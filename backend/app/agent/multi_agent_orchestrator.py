@@ -7,6 +7,7 @@
   - 支持流式输出
 """
 
+import asyncio
 import json
 from typing import AsyncGenerator
 
@@ -78,7 +79,10 @@ class MultiAgentOrchestrator:
     async def chat_stream(self, message: str, image_path: str = None,
                           user_id: int = None, session_id: str = None) -> AsyncGenerator[dict, None]:
         """流式对话 — 路由到对应 Agent 并返回流式结果"""
-        route = await supervisor_agent.route(message)
+        try:
+            route = await supervisor_agent.route(message)
+        except Exception:
+            route = "detection"
         agent = self.agent_map.get(route)
         
         if not agent:
@@ -102,7 +106,13 @@ class MultiAgentOrchestrator:
                     message=message,
                     session_id=session_id,
                 )
-                yield {"type": "text_chunk", "content": result.get("output", "")}
+                output = result.get("output", "")
+                # 模拟流式输出：逐字发送，提升用户体验
+                chunk_size = 3
+                for i in range(0, len(output), chunk_size):
+                    yield {"type": "text_chunk", "content": output[i:i + chunk_size]}
+                    import asyncio
+                    await asyncio.sleep(0.01)
 
         except Exception as e:
             logger.error(f"{route} Agent 流式执行失败: {e}")

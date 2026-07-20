@@ -7,3 +7,7 @@ export function getHistoryRecordsApi(params) {
 export function getStatisticsApi() {
   return request.get('/history/statistics')
 }
+
+export function deleteRecordApi(id) {
+  return request.delete(`/history/tasks/${id}`)
+}

@@ -20,6 +20,9 @@ from app.api.statistics import router as statistics_router
 from app.api.defect_types import router as defect_types_router
 from app.api.results import router as results_router
 from app.api.websocket import router as websocket_router
+from app.api.dashboard import router as dashboard_router
+from app.api.user import router as user_router
+from app.middleware.rate_limiter import RateLimiterMiddleware
 
 def init_minio():
     from app.storage.minio_client import MinIOClient
@@ -55,6 +58,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 app.add_middleware(RequestLogMiddleware)
+app.add_middleware(RateLimiterMiddleware)
 
 app.include_router(auth_router)
 app.include_router(health_router)
@@ -72,6 +76,8 @@ app.include_router(statistics_router)
 app.include_router(defect_types_router)
 app.include_router(results_router)
 app.include_router(websocket_router)
+app.include_router(dashboard_router)
+app.include_router(user_router)
 
 @app.get("/")
 def root():

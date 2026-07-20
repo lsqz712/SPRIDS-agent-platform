@@ -15,7 +15,7 @@ from app.entity.db_models import User
 from app.services.user_service import user_service
 
 # OAuth2 密码模式，用于从请求 Header 中提取 Token
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login", auto_error=False)
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")
 
 
 async def get_current_user(
