@@ -8,14 +8,14 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import desc
 from app.database.session import get_db
-from app.api.deps import get_current_user
+from app.api.deps import get_current_user, check_permission
 from app.api.utils import success_response
 from app.entity.db_models import User, DetectionScene, ModelVersion
 from app.entity.schemas import SceneCreate, SceneResponse
 
 router = APIRouter(prefix="/api/scenes", tags=["检测场景"])
 
-@router.post("", status_code=201)
+@router.post("", status_code=201, dependencies=[Depends(check_permission("scene:create"))])
 async def create_scene(
     request: SceneCreate,
     db: Session = Depends(get_db),

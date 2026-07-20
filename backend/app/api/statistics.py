@@ -11,7 +11,7 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
 from app.database.session import get_db
-from app.api.deps import get_current_active_user
+from app.api.deps import get_current_active_user, check_permission
 from app.api.utils import success_response
 from app.entity.db_models import User
 from app.entity.schemas import (
@@ -26,7 +26,7 @@ from app.services.statistics_service import statistics_service
 router = APIRouter(prefix="/api/statistics", tags=["检测统计"])
 
 
-@router.get("/overview")
+@router.get("/overview", dependencies=[Depends(check_permission("statistics:read"))])
 async def get_overview(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user),
@@ -47,7 +47,7 @@ async def get_overview(
     return success_response(data=OverviewStatistics(**data))
 
 
-@router.get("/daily-trend")
+@router.get("/daily-trend", dependencies=[Depends(check_permission("statistics:read"))])
 async def get_daily_trend(
     days: int = Query(default=30, ge=1, le=365, description="统计最近 N 天"),
     db: Session = Depends(get_db),
@@ -62,7 +62,7 @@ async def get_daily_trend(
     return success_response(data={"days": days, "items": items})
 
 
-@router.get("/defect-distribution")
+@router.get("/defect-distribution", dependencies=[Depends(check_permission("statistics:read"))])
 async def get_defect_distribution(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user),
@@ -78,7 +78,7 @@ async def get_defect_distribution(
     return success_response(data=data)
 
 
-@router.get("/scene-distribution")
+@router.get("/scene-distribution", dependencies=[Depends(check_permission("statistics:read"))])
 async def get_scene_distribution(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user),

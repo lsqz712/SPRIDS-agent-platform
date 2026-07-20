@@ -2,7 +2,7 @@
 公共依赖注入模块
   - 提供 get_current_user（从 JWT Token 解析当前用户）
   - 提供 get_current_active_user（验证用户是否被禁用）
-  - 后续可扩展：RBAC 权限校验的工厂函数（check_permission）
+  - check_permission（RBAC 权限校验工厂函数）
 """
 from fastapi import Depends, HTTPException
 from fastapi.security import OAuth2PasswordBearer
@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 from app.core.security import decode_access_token
 from app.database.session import get_db
 from app.entity.db_models import User
+from app.services.role_service import user_role_service
 from app.services.user_service import user_service
 
 # OAuth2 密码模式，用于从请求 Header 中提取 Token
@@ -57,6 +58,32 @@ async def get_current_active_user(
     if not current_user.is_active:
         raise HTTPException(status_code=403, detail="用户已被禁用")
     return current_user
+
+
+def check_permission(permission_code: str = None):
+    """
+    RBAC 权限校验工厂函数
+    使用方式：@router.get("/xxx", dependencies=[Depends(check_permission("detection:create"))])
+    
+    超级管理员（is_superuser=True）拥有所有权限
+    普通用户需要检查角色权限
+    """
+    async def permission_check(
+        current_user: User = Depends(get_current_active_user),
+        db: Session = Depends(get_db),
+    ) -> User:
+        if current_user.is_superuser:
+            return current_user
+        
+        if permission_code is None:
+            return current_user
+        
+        if not user_role_service.has_permission(db, current_user.id, permission_code):
+            raise HTTPException(status_code=403, detail=f"无权限执行此操作，需要权限: {permission_code}")
+        
+        return current_user
+    
+    return permission_check
 
 
 class ChatUser:

@@ -53,6 +53,7 @@ class User(Base):
     avatar = Column(String(500), nullable=True, comment="头像 URL")
     is_active = Column(Boolean, default=True, comment="是否启用")
     is_superuser = Column(Boolean, default=False, comment="是否超级管理员")
+    is_approved = Column(Boolean, default=False, comment="是否已审批通过")
     last_login_at = Column(DateTime, nullable=True, comment="最后登录时间")
     created_at = Column(DateTime, default=datetime.now, comment="创建时间")
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now, comment="更新时间")
@@ -64,6 +65,7 @@ class User(Base):
     training_tasks = relationship("TrainingTask", back_populates="user")
     chat_sessions = relationship("ChatSession", back_populates="user")
     operation_logs = relationship("OperationLog", back_populates="user")
+    role_applications = relationship("RoleApplication", back_populates="user", cascade="all, delete-orphan", foreign_keys="RoleApplication.user_id")
 
 
 class Role(Base):
@@ -114,6 +116,23 @@ class RolePermission(Base):
 
     role = relationship("Role", back_populates="role_permissions")
     permission = relationship("Permission", back_populates="role_permissions")
+
+
+class RoleApplication(Base):
+    """角色申请记录表"""
+    __tablename__ = "role_applications"
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True, comment="申请人")
+    role_id = Column(Integer, ForeignKey("roles.id", ondelete="CASCADE"), nullable=False, index=True, comment="申请的角色")
+    status = Column(String(20), default="pending", comment="申请状态：pending/approved/rejected")
+    approver_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True, comment="审批人")
+    approve_comment = Column(String(500), nullable=True, comment="审批意见")
+    applied_at = Column(DateTime, default=datetime.now, comment="申请时间")
+    approved_at = Column(DateTime, nullable=True, comment="审批时间")
+
+    user = relationship("User", back_populates="role_applications", foreign_keys=[user_id])
+    role = relationship("Role")
+    approver = relationship("User", foreign_keys=[approver_id])
 
 
 # ══════════════════════════════════════════════════════════════

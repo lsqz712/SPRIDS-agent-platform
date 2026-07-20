@@ -61,6 +61,27 @@
           </el-form-item>
         </div>
 
+        <div class="register-field register-module">
+          <el-form-item prop="role">
+            <el-select
+              v-model="registerForm.role"
+              placeholder="请选择角色"
+              :prefix-icon="User"
+              class="role-select"
+            >
+              <el-option label="普通访客 - 仅查看检测报告与统计信息" value="viewer" />
+              <el-option label="质检操作员 - 执行PCB检测任务、查看检测结果、人工复判" value="operator" />
+              <el-option label="数据工程师 - 管理数据集、发起模型训练、管理模型版本" value="engineer" />
+              <el-option label="管理员 - 系统全部权限（需审批）" value="admin" />
+            </el-select>
+          </el-form-item>
+        </div>
+
+        <div v-if="registerForm.role !== 'viewer'" class="register-tip">
+          <span class="tip-icon">⚠️</span>
+          <span>申请此角色需等待管理员审批通过后才能登录</span>
+        </div>
+
         <button
           type="button"
           class="phro-btn register-btn register-module"
@@ -95,6 +116,7 @@ const registerForm = reactive({
   email: '',
   password: '',
   confirmPassword: '',
+  role: 'viewer',
 })
 
 const validateConfirmPassword = (rule, value, callback) => {
@@ -122,6 +144,9 @@ const registerRules = {
     { required: true, message: '请确认密码', trigger: 'blur' },
     { validator: validateConfirmPassword, trigger: 'blur' },
   ],
+  role: [
+    { required: true, message: '请选择角色', trigger: 'change' },
+  ],
 }
 
 async function handleRegister() {
@@ -130,18 +155,36 @@ async function handleRegister() {
 
   loading.value = true
   try {
-    await registerApi({
+    const response = await registerApi({
       username: registerForm.username,
       email: registerForm.email,
       password: registerForm.password,
+      role: registerForm.role,
     })
-    ElMessage.success('注册成功，请登录')
-    router.push('/login')
+    
+    const { data } = response
+    if (data.is_approved) {
+      ElMessage.success('注册成功，请登录')
+      router.push('/login')
+    } else {
+      ElMessage.info(`注册成功，申请的角色为「${getRoleLabel(data.applied_role)}」，请等待管理员审批`)
+      router.push('/login')
+    }
   } catch {
     // 错误已在 Axios 拦截器中统一处理
   } finally {
     loading.value = false
   }
+}
+
+function getRoleLabel(role) {
+  const labels = {
+    admin: '管理员',
+    operator: '质检操作员',
+    engineer: '数据工程师',
+    viewer: '普通访客',
+  }
+  return labels[role] || role
 }
 </script>
 
@@ -273,5 +316,44 @@ async function handleRegister() {
   font-size: 12px;
   text-shadow: 0 1px 2px rgba(40, 6, 16, 0.5);
   padding-top: 4px;
+}
+
+.role-select {
+  width: 100%;
+}
+
+:deep(.el-select__wrapper) {
+  @include phro.phro-input-base;
+  box-shadow: none !important;
+  padding: 8px 12px;
+  border: none;
+  background: transparent !important;
+}
+
+:deep(.el-select__inner) {
+  color: $phro-text-deep;
+  font-family: inherit;
+}
+
+:deep(.el-select__placeholder) {
+  color: $phro-text-mid;
+}
+
+.register-tip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  margin-top: -8px;
+  margin-bottom: 8px;
+  font-size: 12px;
+  color: #e8b86d;
+  background: rgba(232, 184, 109, 0.1);
+  border: 1px solid rgba(232, 184, 109, 0.3);
+  border-radius: 6px;
+
+  .tip-icon {
+    font-size: 14px;
+  }
 }
 </style>

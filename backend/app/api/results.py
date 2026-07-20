@@ -11,7 +11,7 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
 from app.database.session import get_db
-from app.api.deps import get_current_user, get_current_active_user
+from app.api.deps import get_current_user, get_current_active_user, check_permission
 from app.api.utils import success_response
 from app.entity.db_models import User
 from app.entity.schemas import (
@@ -66,7 +66,7 @@ async def get_result(
     return success_response(data=result_data)
 
 
-@router.put("/{result_id}/review")
+@router.put("/{result_id}/review", dependencies=[Depends(check_permission("detection:review"))])
 async def update_result_review(
     result_id: int,
     data: ResultReviewRequest,
@@ -114,7 +114,7 @@ async def update_result_review(
     }, message="复判成功")
 
 
-@router.put("/{result_id}/severity")
+@router.put("/{result_id}/severity", dependencies=[Depends(check_permission("detection:review"))])
 async def update_result_severity(
     result_id: int,
     data: ResultSeverityRequest,

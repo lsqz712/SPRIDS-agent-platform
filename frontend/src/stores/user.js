@@ -3,7 +3,7 @@
  * 管理用户登录信息、Token、角色等
  */
 import { defineStore } from 'pinia'
-import { loginApi, getUserInfoApi, updateProfileApi, changePasswordApi, uploadAvatarApi } from '@/api/auth'
+import { loginApi, getUserInfoApi, updateProfileApi, changePasswordApi, uploadAvatarApi, getMyRoleApplicationsApi } from '@/api/auth'
 import { readFileAsDataUrl, resolveAvatarUrl } from '@/utils/avatar'
 
 const TOKEN_KEY = 'rsod_token'
@@ -25,6 +25,7 @@ export const useUserStore = defineStore('user', {
     avatar: (state) => resolveAvatarUrl(state.user?.avatar || ''),
     roles: (state) => state.user?.roles || [],
     isSuperuser: (state) => state.user?.is_superuser || false,
+    isApproved: (state) => state.user?.is_approved !== false,
   },
 
   actions: {
@@ -52,6 +53,12 @@ export const useUserStore = defineStore('user', {
       } catch {
         this.logout()
       }
+    },
+
+    async fetchRoleApplications() {
+      if (this.token === 'dev-preview') return []
+      const res = await getMyRoleApplicationsApi()
+      return res.data || []
     },
 
     async updateProfile(data) {
@@ -106,6 +113,7 @@ export const useUserStore = defineStore('user', {
         roles: ['admin'],
         is_superuser: true,
         is_active: true,
+        is_approved: true,
         created_at: new Date().toISOString(),
         last_login_at: new Date().toISOString(),
       }

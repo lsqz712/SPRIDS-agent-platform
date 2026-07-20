@@ -12,6 +12,7 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
 from app.api.auth import get_current_user
+from app.api.deps import check_permission
 from app.core.logger import get_logger
 from app.database.session import get_db
 from app.entity.schemas import ChangePassword, UserUpdate
@@ -22,7 +23,7 @@ logger = get_logger(__name__)
 router = APIRouter(prefix="/api/user", tags=["用户管理"])
 
 
-@router.get("/list", summary="用户列表")
+@router.get("/list", summary="用户列表", dependencies=[Depends(check_permission("user:read"))])
 async def list_users(
     role: str = Query(None, description="角色筛选"),
     is_active: bool = Query(None, description="激活状态筛选"),
@@ -51,7 +52,7 @@ async def list_users(
     return {"users": result, "total": len(result)}
 
 
-@router.get("/roles", summary="系统角色列表")
+@router.get("/roles", summary="系统角色列表", dependencies=[Depends(check_permission("role:read"))])
 async def list_roles(current_user=Depends(get_current_user), db: Session = Depends(get_db)):
     """获取系统所有角色"""
     from app.entity.db_models import Role

@@ -22,7 +22,7 @@ const request = axios.create({
 request.interceptors.request.use(
   (config) => {
     const userStore = useUserStore()
-    if (userStore.token) {
+    if (userStore.token && userStore.token !== 'dev-preview') {
       config.headers.Authorization = `Bearer ${userStore.token}`
     }
     if (config.data instanceof FormData) {

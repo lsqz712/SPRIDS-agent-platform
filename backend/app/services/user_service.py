@@ -7,7 +7,8 @@ from fastapi import HTTPException, UploadFile
 from sqlalchemy.orm import Session
 
 from app.core.security import create_access_token, hash_password, verify_password
-from app.entity.db_models import User
+from app.entity.db_models import User, Role, RoleApplication
+from app.services.role_service import user_role_service
 from app.storage.minio_client import minio_client
 
 AVATAR_MAX_BYTES = 2 * 1024 * 1024
@@ -18,14 +19,20 @@ AVATAR_ALLOWED_TYPES = {
     "image/gif": ".gif",
 }
 
+REQUIRE_APPROVAL_ROLES = {"admin", "operator", "engineer"}
+
 
 class UserService:
     @staticmethod
-    def register(db: Session, username: str, email: str, password: str) -> User:
+    def register(db: Session, username: str, email: str, password: str, role: str = "viewer") -> User:
         if db.query(User).filter(User.username == username).first():
             raise HTTPException(status_code=400, detail="用户名已存在")
         if db.query(User).filter(User.email == email).first():
             raise HTTPException(status_code=400, detail="邮箱已被注册")
+
+        valid_roles = {"admin", "operator", "engineer", "viewer"}
+        if role not in valid_roles:
+            raise HTTPException(status_code=400, detail=f"无效的角色，可选: {', '.join(valid_roles)}")
 
         new_user = User(
             username=username,
@@ -35,6 +42,27 @@ class UserService:
         db.add(new_user)
         db.commit()
         db.refresh(new_user)
+
+        target_role = db.query(Role).filter(Role.name == role).first()
+        if not target_role:
+            raise HTTPException(status_code=500, detail="角色不存在")
+
+        if role in REQUIRE_APPROVAL_ROLES:
+            new_user.is_approved = False
+            application = RoleApplication(
+                user_id=new_user.id,
+                role_id=target_role.id,
+                status="pending",
+            )
+            db.add(application)
+            db.commit()
+        else:
+            new_user.is_approved = True
+            user_role_service.assign_role_to_user(db, new_user.id, target_role.id)
+
+        db.commit()
+        db.refresh(new_user)
+
         return new_user
 
     @staticmethod
@@ -42,6 +70,13 @@ class UserService:
         user = db.query(User).filter(User.username == username).first()
         if not user or not verify_password(password, user.hashed_password):
             raise HTTPException(status_code=401, detail="用户名或密码错误")
+
+        if not user.is_active:
+            raise HTTPException(status_code=401, detail="账号已被禁用")
+
+        if not user.is_approved:
+            raise HTTPException(status_code=401, detail="账号尚未通过审批，请等待管理员审批")
+
         return user
 
     @staticmethod
@@ -58,6 +93,45 @@ class UserService:
         if not user:
             raise HTTPException(status_code=404, detail="用户不存在")
         return user
+
+    @staticmethod
+    def get_role_applications(db: Session, status: str = None) -> list[RoleApplication]:
+        query = db.query(RoleApplication)
+        if status:
+            query = query.filter(RoleApplication.status == status)
+        return query.order_by(RoleApplication.applied_at.desc()).all()
+
+    @staticmethod
+    def get_user_role_applications(db: Session, user_id: int) -> list[RoleApplication]:
+        return db.query(RoleApplication).filter(
+            RoleApplication.user_id == user_id
+        ).order_by(RoleApplication.applied_at.desc()).all()
+
+    @staticmethod
+    def approve_role_application(db: Session, application_id: int, approver_id: int, status: str, comment: str = None) -> RoleApplication:
+        application = db.query(RoleApplication).filter(RoleApplication.id == application_id).first()
+        if not application:
+            raise HTTPException(status_code=404, detail="申请不存在")
+
+        if application.status != "pending":
+            raise HTTPException(status_code=400, detail="申请已处理")
+
+        if status not in {"approved", "rejected"}:
+            raise HTTPException(status_code=400, detail="无效的审批状态")
+
+        application.status = status
+        application.approver_id = approver_id
+        application.approve_comment = comment
+
+        if status == "approved":
+            user = db.query(User).filter(User.id == application.user_id).first()
+            if user:
+                user.is_approved = True
+                user_role_service.assign_role_to_user(db, user.id, application.role_id)
+
+        db.commit()
+        db.refresh(application)
+        return application
 
     @staticmethod
     def update_profile(db: Session, user: User, updates: dict) -> User:

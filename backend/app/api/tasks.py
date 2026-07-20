@@ -11,7 +11,7 @@ from fastapi import APIRouter, Depends, Query, UploadFile, File, Form
 from sqlalchemy.orm import Session
 
 from app.database.session import get_db
-from app.api.deps import get_current_user
+from app.api.deps import get_current_user, check_permission
 from app.api.utils import success_response
 from app.entity.db_models import User, DetectionTask, TaskStatus
 from app.services.detection_service import detection_service
@@ -63,7 +63,7 @@ async def list_tasks(
     })
 
 
-@router.post("/single", status_code=201)
+@router.post("/single", status_code=201, dependencies=[Depends(check_permission("detection:create"))])
 async def create_single_task(
     scene_id: int = Form(..., description="检测场景 ID"),
     image: UploadFile = File(..., description="PCB 图像文件"),
@@ -106,7 +106,7 @@ async def create_single_task(
     }, message="检测任务创建成功（待推理引擎处理）", code=201)
 
 
-@router.post("/batch", status_code=201)
+@router.post("/batch", status_code=201, dependencies=[Depends(check_permission("detection:create"))])
 async def create_batch_task(
     scene_id: int = Form(..., description="检测场景 ID"),
     images: list[UploadFile] = File(..., description="PCB 图像文件列表"),
@@ -186,7 +186,7 @@ async def get_task(
     return success_response(data=response_data)
 
 
-@router.delete("/{task_id}")
+@router.delete("/{task_id}", dependencies=[Depends(check_permission("detection:delete"))])
 async def delete_task(
     task_id: int,
     db: Session = Depends(get_db),
