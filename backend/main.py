@@ -23,6 +23,7 @@ from app.api.websocket import router as websocket_router
 from app.api.dashboard import router as dashboard_router
 from app.api.user import router as user_router
 from app.api.knowledge import router as knowledge_router
+from app.api.roles import router as roles_router
 from app.middleware.rate_limiter import RateLimiterMiddleware
 
 def init_minio():
@@ -33,10 +34,21 @@ def init_minio():
     except Exception as e:
         print(f"MinIO 初始化失败: {e}")
 
+def init_roles_and_permissions():
+    from app.database.session import get_db
+    from app.services.init_service import init_service
+    try:
+        db = next(get_db())
+        result = init_service.init_all(db)
+        print(f"角色权限初始化完成: {result['permissions_created']} 个权限, {result['roles_created']} 个角色")
+    except Exception as e:
+        print(f"角色权限初始化失败: {e}")
+
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     print("正在初始化服务...")
     init_minio()
+    init_roles_and_permissions()
     yield
     print("服务已关闭")
 
@@ -80,6 +92,7 @@ app.include_router(websocket_router)
 app.include_router(dashboard_router)
 app.include_router(user_router)
 app.include_router(knowledge_router)
+app.include_router(roles_router)
 
 @app.get("/")
 def root():

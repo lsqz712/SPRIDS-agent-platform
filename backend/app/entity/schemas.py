@@ -25,6 +25,7 @@ class UserRegister(BaseModel):
     username: str = Field(..., min_length=3, max_length=50, description="⽤户名")
     email: str = Field(..., description="邮箱")
     password: str = Field(..., min_length=6, max_length=100, description="密码")
+    role: Optional[str] = Field(default="viewer", description="申请的角色：admin/operator/engineer/viewer")
 class UserLogin(BaseModel):
     """⽤户登录请求"""
     username: str = Field(..., description="⽤户名或邮箱")
@@ -94,6 +95,30 @@ class PermissionResponse(BaseModel):
     module: str
     description: Optional[str] = None
     model_config = {"from_attributes": True}
+
+
+class RoleApplicationResponse(BaseModel):
+    """角色申请响应"""
+    id: int
+    user_id: int
+    username: str
+    email: str
+    role_id: int
+    role_name: str
+    role_display_name: str
+    status: str
+    approver_id: Optional[int] = None
+    approver_name: Optional[str] = None
+    approve_comment: Optional[str] = None
+    applied_at: datetime
+    approved_at: Optional[datetime] = None
+
+
+class RoleApplicationApprove(BaseModel):
+    """审批请求"""
+    status: str = Field(..., description="审批状态：approved/rejected")
+    comment: Optional[str] = None
+
 
 # ══════════════════════════════════════════════════════════════
 # ⼆、检测业务
