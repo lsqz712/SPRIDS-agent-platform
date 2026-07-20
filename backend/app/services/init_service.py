@@ -168,14 +168,28 @@ class InitService:
     def init_all(db: Session) -> dict:
         result = {}
 
-        # 一键修复：存量用户自动审批
+        # 一键修复：存量用户自动审批 + 分配 viewer 角色
         from sqlalchemy import update
-        fixed = db.execute(
-            update(User).where(User.is_approved == False).values(is_approved=True)
-        ).rowcount
-        if fixed:
+        users_to_fix = db.query(User).filter(
+            (User.is_approved == False) | (User.is_approved == None)
+        ).all()
+        for user in users_to_fix:
+            user.is_approved = True
+        if users_to_fix:
             db.commit()
-            result["existing_users_approved"] = fixed
+            result["existing_users_approved"] = len(users_to_fix)
+
+        # 存量用户：没有角色的自动分配 viewer
+        viewer_role = role_service.get_role_by_name(db, "viewer")
+        if viewer_role:
+            unassigned = db.query(User).filter(
+                ~User.user_roles.any()
+            ).all()
+            for user in unassigned:
+                db.add(UserRole(user_id=user.id, role_id=viewer_role.id))
+            if unassigned:
+                db.commit()
+                result["viewer_assigned"] = len(unassigned)
 
         perm_count = InitService.init_permissions(db)
         result["permissions_created"] = perm_count
