@@ -66,10 +66,12 @@ class EmbeddingClient:
         return [self.embed(text) for text in texts]
 
     def _mock_embed(self, text: str) -> List[float]:
+        dims = {"text-embedding-3-small": 1536, "text-embedding-v3": 1024, "BAAI/bge-large-zh-v1.5": 1024}
+        dim = dims.get(self._model, 1536)
         tokens = self._tokenize(text)
-        vector = np.zeros(1536, dtype=np.float32)
+        vector = np.zeros(dim, dtype=np.float32)
         for token in tokens:
-            idx = hash(token) % 1536
+            idx = hash(token) % dim
             vector[idx] += 1.0
         if np.sum(vector) > 0:
             vector = vector / np.sum(vector)
