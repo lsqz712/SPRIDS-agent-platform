@@ -47,6 +47,7 @@
   justify-content: space-between;
   gap: $spacing-md;
   flex-wrap: wrap;
+  min-width: 0;
 
   h2 {
     font-size: 18px;
@@ -61,6 +62,17 @@
     font-size: 12px;
     color: $phro-text-mid;
   }
+}
+
+.phro-page-header-main {
+  min-width: 0;
+  flex: 1 1 200px;
+}
+
+.phro-page-header-actions {
+  min-width: 0;
+  flex: 0 1 auto;
+  max-width: 100%;
 }
 
 .phro-page-body {

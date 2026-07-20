@@ -40,6 +40,8 @@ function redraw() {
 
   const w = wrap.clientWidth
   const h = wrap.clientHeight
+  if (w < 2 || h < 2) return
+
   canvas.width = w
   canvas.height = h
 
@@ -103,21 +105,23 @@ onBeforeUnmount(() => {
 
 .bbox-canvas-wrap {
   position: relative;
+  box-sizing: border-box;
   width: 100%;
   height: 100%;
-  flex: 1;
-  min-height: 0;
+  min-height: 240px;
   border-radius: $phro-radius-sm;
   overflow: hidden;
-  display: flex;
-  align-items: center;
-  justify-content: center;
   background: rgba($phro-rose, 0.06);
 }
 
 .bbox-image {
+  position: absolute;
+  inset: 0;
+  margin: auto;
   max-width: 100%;
   max-height: 100%;
+  width: auto;
+  height: auto;
   object-fit: contain;
   display: block;
 }
@@ -131,9 +135,12 @@ onBeforeUnmount(() => {
 }
 
 .bbox-placeholder {
+  position: absolute;
+  inset: 0;
   display: flex;
   flex-direction: column;
   align-items: center;
+  justify-content: center;
   gap: 10px;
   color: $phro-text-mid;
   font-size: 13px;

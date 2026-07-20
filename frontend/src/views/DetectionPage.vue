@@ -18,6 +18,7 @@
       </div>
     </template>
 
+    <div class="detection-page">
     <div class="detection-layout">
       <aside class="detection-side phro-panel-sections">
         <div class="phro-module">
@@ -143,7 +144,7 @@
               <div v-for="(det, i) in camDetections" :key="i" class="cam-det-item">
                 <div class="cam-det-name">{{ det.class_name }}</div>
                 <el-progress :percentage="Math.round(det.confidence * 100)" :stroke-width="6" style="flex:1;margin:0 12px" />
-                <div class="cam-det-bbox">[{{ det.bbox.map(v => Math.round(v)).join(', ') }}]</div>
+                <div class="cam-det-bbox" :title="`[${det.bbox.map(v => Math.round(v)).join(', ')}]`">[{{ det.bbox.map(v => Math.round(v)).join(', ') }}]</div>
               </div>
             </div>
           </div>
@@ -208,6 +209,7 @@
           <span class="batch-count">{{ item.detections.length }} 个缺陷</span>
         </div>
       </div>
+    </div>
     </div>
   </PhroPageShell>
 </template>
@@ -483,36 +485,84 @@ onBeforeUnmount(() => { stopCamera() })
 <style lang="scss" scoped>
 @use '@/assets/styles/phro-theme.scss' as phro;
 
-.detection-layout {
+/* 整页填满窗口：预览吃掉剩余高度，批量条固定底部，杜绝预览被压成细条 */
+.detection-page {
   flex: 1;
   min-height: 0;
-  display: grid;
-  grid-template-columns: minmax(260px, 300px) 1fr;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
   gap: $phro-module-gap;
+  overflow: hidden;
+}
+
+.detection-layout {
+  flex: 1 1 0;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(220px, 280px) minmax(0, 1fr);
+  gap: $phro-module-gap;
+  overflow: hidden;
 }
 
 .detection-side {
   min-height: 0;
+  min-width: 0;
   display: flex;
   flex-direction: column;
+  overflow-x: hidden;
+  overflow-y: auto;
 }
 
 .detection-main {
   min-height: 0;
+  min-width: 0;
+  height: 100%;
   display: grid;
-  grid-template-rows: 1fr minmax(160px, 220px);
+  grid-template-rows: minmax(0, 1fr) 168px;
   gap: $phro-module-gap;
+  overflow: hidden;
 }
 
 .preview-card {
   min-height: 0;
+  height: 100%;
+  display: flex !important;
+  flex-direction: column;
+  overflow: hidden;
+
+  .phro-module-body {
+    flex: 1 1 0;
+    min-height: 0;
+    height: auto;
+    overflow: hidden;
+  }
+
+  :deep(.bbox-canvas-wrap) {
+    flex: 1 1 0;
+    width: 100%;
+    height: 100%;
+    min-height: 0;
+  }
 }
 
 .result-card {
   min-height: 0;
+  min-width: 0;
+  height: 100%;
   overflow: hidden;
   display: flex;
   flex-direction: column;
+}
+
+.batch-card {
+  flex: 0 0 auto;
+  flex-shrink: 0;
+  min-width: 0;
+  max-height: 178px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 
 .scene-name {
@@ -697,8 +747,10 @@ onBeforeUnmount(() => { stopCamera() })
 .cam-det-item {
   display: flex;
   align-items: center;
+  gap: 8px;
   padding: 6px 0;
   border-bottom: 1px solid rgba($phro-rose, 0.08);
+  min-width: 0;
 }
 
 .cam-det-item:last-child {
@@ -707,9 +759,14 @@ onBeforeUnmount(() => { stopCamera() })
 
 .cam-det-name {
   font-weight: 600;
-  min-width: 90px;
+  min-width: 72px;
+  max-width: 100px;
   font-size: 12px;
   color: $phro-text-deep;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .cam-det-bbox {
@@ -717,6 +774,11 @@ onBeforeUnmount(() => { stopCamera() })
   color: $phro-text-mid;
   font-family: monospace;
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+  flex: 0 1 auto;
+  max-width: 40%;
 }
 
 .cam-snapshot-list {
@@ -737,19 +799,30 @@ onBeforeUnmount(() => { stopCamera() })
 }
 
 .batch-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  display: flex;
   gap: 12px;
+  min-width: 0;
 }
 
 .batch-grid-scroll {
-  max-height: 300px;
-  overflow-y: auto;
-  padding-right: 4px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding-bottom: 4px;
+
+  &::-webkit-scrollbar {
+    height: 4px;
+  }
+
+  &::-webkit-scrollbar-thumb {
+    background: rgba($phro-gold, 0.35);
+    border-radius: 2px;
+  }
 }
 
 .batch-item {
   @include phro.phro-module-box;
+  flex: 0 0 140px;
+  width: 140px;
   padding: 8px;
   cursor: pointer;
   text-align: center;
@@ -799,12 +872,52 @@ onBeforeUnmount(() => { stopCamera() })
 }
 
 @media (max-width: 960px) {
+  .detection-page {
+    overflow-y: auto;
+  }
+
   .detection-layout {
     grid-template-columns: 1fr;
+    flex: 1 1 auto;
+    min-height: 520px;
+    overflow: visible;
+  }
+
+  .detection-main {
+    grid-template-rows: minmax(320px, 55vh) 168px;
+    height: auto;
+    overflow: visible;
+  }
+
+  .preview-card {
+    min-height: 320px;
+  }
+
+  .batch-card {
+    max-height: none;
   }
 
   .camera-layout {
     flex-direction: column !important;
+  }
+}
+
+@media (max-height: 700px) {
+  .detection-main {
+    grid-template-rows: minmax(0, 1fr) 140px;
+  }
+
+  .batch-card {
+    max-height: 150px;
+  }
+
+  .batch-item {
+    flex-basis: 120px;
+    width: 120px;
+
+    .batch-thumb {
+      height: 72px;
+    }
   }
 }
 </style>
