@@ -194,19 +194,21 @@
         {{ mode === 'video' ? '视频关键帧' : '批量结果概览' }} ({{ batchResults.length }})
         <span style="font-size:11px;color:#999;font-weight:normal;margin-left:6px">点击预览</span>
       </h3>
-      <div class="batch-grid batch-grid-scroll">
-        <div
-          v-for="(item, idx) in batchResults"
-          :key="idx"
-          class="batch-item"
-          @click="selectBatchItem(item)"
-        >
-          <div class="batch-thumb">
-            <img v-if="item.imageUrl" :src="item.imageUrl" :alt="item.name" />
-            <div v-else class="batch-no-img">📋</div>
+      <div class="batch-grid-scroll">
+        <div class="batch-grid">
+          <div
+            v-for="(item, idx) in batchResults"
+            :key="idx"
+            class="batch-item"
+            @click="selectBatchItem(item)"
+          >
+            <div class="batch-thumb">
+              <img v-if="item.imageUrl" :src="item.imageUrl" :alt="item.name" />
+              <div v-else class="batch-no-img">📋</div>
+            </div>
+            <span class="batch-name">{{ item.name }}</span>
+            <span class="batch-count">{{ item.detections.length }} 个缺陷</span>
           </div>
-          <span class="batch-name">{{ item.name }}</span>
-          <span class="batch-count">{{ item.detections.length }} 个缺陷</span>
         </div>
       </div>
     </div>
@@ -559,10 +561,15 @@ onBeforeUnmount(() => { stopCamera() })
   flex: 0 0 auto;
   flex-shrink: 0;
   min-width: 0;
-  max-height: 178px;
+  width: 100%;
+  max-height: 220px;
   display: flex;
   flex-direction: column;
   overflow: hidden;
+
+  .phro-module-title {
+    flex-shrink: 0;
+  }
 }
 
 .scene-name {
@@ -800,29 +807,50 @@ onBeforeUnmount(() => { stopCamera() })
 
 .batch-grid {
   display: flex;
+  flex-wrap: nowrap;
   gap: 12px;
-  min-width: 0;
+  width: max-content;
+  min-width: 100%;
 }
 
 .batch-grid-scroll {
-  overflow-x: auto;
+  flex: 1 1 auto;
+  min-width: 0;
+  width: 100%;
+  overflow-x: scroll;
   overflow-y: hidden;
-  padding-bottom: 4px;
+  padding-bottom: 6px;
+  /* Firefox */
+  scrollbar-width: thin;
+  scrollbar-color: rgba($phro-gold, 0.55) rgba($phro-rose, 0.12);
 
+  /* Chromium / Safari：始终显示可拖动的横向滑动条 */
   &::-webkit-scrollbar {
-    height: 4px;
+    height: 10px;
+  }
+
+  &::-webkit-scrollbar-track {
+    background: rgba($phro-rose, 0.12);
+    border-radius: 5px;
   }
 
   &::-webkit-scrollbar-thumb {
-    background: rgba($phro-gold, 0.35);
-    border-radius: 2px;
+    background: rgba($phro-gold, 0.55);
+    border-radius: 5px;
+    border: 2px solid transparent;
+    background-clip: padding-box;
+
+    &:hover {
+      background: rgba($phro-gold, 0.75);
+      background-clip: padding-box;
+    }
   }
 }
 
 .batch-item {
   @include phro.phro-module-box;
-  flex: 0 0 140px;
-  width: 140px;
+  flex: 0 0 132px;
+  width: 132px;
   padding: 8px;
   cursor: pointer;
   text-align: center;
@@ -832,7 +860,7 @@ onBeforeUnmount(() => { stopCamera() })
 
   .batch-thumb {
     width: 100%;
-    height: 100px;
+    height: 88px;
     display: flex;
     align-items: center;
     justify-content: center;
