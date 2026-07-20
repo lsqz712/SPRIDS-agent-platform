@@ -1,0 +1,86 @@
+﻿version: "3.8"
+
+services:
+  # Vue前端 Nginx
+  frontend:
+    image: ghcr.io/lsqz712/pcb-frontend:latest
+    container_name: pcb-frontend
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+    networks:
+      pcb-net:
+
+  # FastAPI 后端（含PyTorch YOLO推理）
+  backend:
+    image: ghcr.io/lsqz712/pcb-backend:latest
+    container_name: pcb-backend
+    restart: unless-stopped
+    env_file:
+      # 适配你真实环境文件路径
+      - /opt/pcb-web-platform/.env
+    volumes:
+      # 挂载标记文件 .pcb_platform
+      - /opt/pcb-web-platform/.pcb_platform:/app/.pcb_platform:ro
+    depends_on:
+      postgres:
+        condition: service_started
+      redis:
+        condition: service_started
+      minio:
+        condition: service_started
+    networks:
+      pcb-net:
+
+  # PostgreSQL 数据库
+  postgres:
+    image: postgres:16-alpine
+    container_name: pcb-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: ${DB_NAME}
+    volumes:
+      - /data/postgres:/var/lib/postgresql/data
+    ports:
+      - "127.0.0.1:5432:5432"
+    networks:
+      pcb-net:
+
+  # Redis缓存
+  redis:
+    image: redis:7-alpine
+    container_name: pcb-redis
+    restart: unless-stopped
+    volumes:
+      - /data/redis:/data
+    command: redis-server --appendonly yes
+    ports:
+      - "127.0.0.1:6379:6379"
+    networks:
+      pcb-net:
+
+  # MinIO 对象存储
+  minio:
+    image: minio/minio:latest
+    container_name: pcb-minio
+    restart: unless-stopped
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+      MINIO_PUBLIC_ENDPOINT: ${MINIO_PUBLIC_ENDPOINT}
+    volumes:
+      - /data/minio:/data
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    command: server /data --console-address ":9001"
+    networks:
+      pcb-net:
+
+networks:
+  pcb-net:
+    driver: bridge

@@ -7,7 +7,7 @@ export const CHROME_EAR_CAP_VIEW_W = 15
 export const CHROME_EAR_BAND_VIEW_H = 7
 export const CHROME_EAR_CORNER_R = 3
 export const EAR_BAND_FRAME_RATIO = 7 / 107
-export const CHROME_FALLBACK_BASE = { width: 960, height: 680 }
+export const CHROME_FALLBACK_BASE = { width: 1200, height: 750 }
 /** 与 FeixunWindow $phro-window-padding 保持一致 */
 export const CHROME_EAR_LOGO_PAD = 14
 

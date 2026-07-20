@@ -12,13 +12,14 @@ from sqlalchemy.orm import Session
 
 from app.database.session import get_db
 from app.api.deps import get_current_user
+from app.api.utils import success_response
 from app.entity.db_models import User, DetectionTask, TaskStatus
 from app.services.detection_service import detection_service
 
 router = APIRouter(prefix="/api/tasks", tags=["检测任务"])
 
 
-@router.get("", response_model=dict)
+@router.get("")
 async def list_tasks(
     page: int = Query(default=1, ge=1, description="页码"),
     page_size: int = Query(default=20, ge=1, le=100, description="每页数量"),
@@ -53,20 +54,16 @@ async def list_tasks(
     )
     total_pages = (total + page_size - 1) // page_size
 
-    return {
-        "code": 200,
-        "message": "success",
-        "data": {
-            "total": total,
-            "page": page,
-            "page_size": page_size,
-            "total_pages": total_pages,
-            "items": tasks,
-        },
-    }
+    return success_response(data={
+        "total": total,
+        "page": page,
+        "page_size": page_size,
+        "total_pages": total_pages,
+        "items": tasks,
+    })
 
 
-@router.post("/single", response_model=dict, status_code=201)
+@router.post("/single", status_code=201)
 async def create_single_task(
     scene_id: int = Form(..., description="检测场景 ID"),
     image: UploadFile = File(..., description="PCB 图像文件"),
@@ -90,7 +87,6 @@ async def create_single_task(
     """
     user_id = current_user.id if current_user else None
 
-    # 创建任务记录
     task = detection_service.create_single_task(
         db=db,
         scene_id=scene_id,
@@ -102,23 +98,15 @@ async def create_single_task(
         source=source,
     )
 
-    # TODO: 集成 YOLO 推理引擎
-    # image_bytes = await image.read()
-    # yolo_results = yolo_engine.detect(image_bytes, scene_id, ...)
-
-    return {
-        "code": 201,
-        "message": "检测任务创建成功（待推理引擎处理）",
-        "data": {
-            "task_id": task.id,
-            "scene_id": scene_id,
-            "status": task.status.value,
-            "filename": image.filename,
-        },
-    }
+    return success_response(data={
+        "task_id": task.id,
+        "scene_id": scene_id,
+        "status": task.status.value,
+        "filename": image.filename,
+    }, message="检测任务创建成功（待推理引擎处理）", code=201)
 
 
-@router.post("/batch", response_model=dict, status_code=201)
+@router.post("/batch", status_code=201)
 async def create_batch_task(
     scene_id: int = Form(..., description="检测场景 ID"),
     images: list[UploadFile] = File(..., description="PCB 图像文件列表"),
@@ -147,19 +135,15 @@ async def create_batch_task(
         source=source,
     )
 
-    return {
-        "code": 201,
-        "message": f"批量检测任务创建成功，共 {len(images)} 张图像（待推理引擎处理）",
-        "data": {
-            "task_id": task.id,
-            "scene_id": scene_id,
-            "status": task.status.value,
-            "image_count": len(images),
-        },
-    }
+    return success_response(data={
+        "task_id": task.id,
+        "scene_id": scene_id,
+        "status": task.status.value,
+        "image_count": len(images),
+    }, message=f"批量检测任务创建成功，共 {len(images)} 张图像（待推理引擎处理）", code=201)
 
 
-@router.get("/{task_id}", response_model=dict)
+@router.get("/{task_id}")
 async def get_task(
     task_id: int,
     include_results: bool = Query(default=False, description="是否包含检测结果"),
@@ -199,14 +183,10 @@ async def get_task(
         results, _ = detection_service.get_task_results(db=db, task_id=task_id)
         response_data["results"] = results
 
-    return {
-        "code": 200,
-        "message": "success",
-        "data": response_data,
-    }
+    return success_response(data=response_data)
 
 
-@router.delete("/{task_id}", status_code=204)
+@router.delete("/{task_id}")
 async def delete_task(
     task_id: int,
     db: Session = Depends(get_db),
@@ -226,10 +206,10 @@ async def delete_task(
         )
 
     detection_service.delete_task(db=db, task_id=task_id)
-    return None
+    return success_response(message="任务已删除")
 
 
-@router.get("/{task_id}/results", response_model=dict)
+@router.get("/{task_id}/results")
 async def get_task_results(
     task_id: int,
     page: int = Query(default=1, ge=1, description="页码"),
@@ -260,14 +240,10 @@ async def get_task_results(
     )
     total_pages = (total + page_size - 1) // page_size
 
-    return {
-        "code": 200,
-        "message": "success",
-        "data": {
-            "total": total,
-            "page": page,
-            "page_size": page_size,
-            "total_pages": total_pages,
-            "items": results,
-        },
-    }
+    return success_response(data={
+        "total": total,
+        "page": page,
+        "page_size": page_size,
+        "total_pages": total_pages,
+        "items": results,
+    })

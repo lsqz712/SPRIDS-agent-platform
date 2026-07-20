@@ -1,0 +1,35 @@
+name: Build & Push Backend Image
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - backend/**
+      - .github/workflows/build-backend.yml
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Login GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build & Push backend
+        uses: docker/build-push-action@v6
+        with:
+          context: ./backend
+          file: ./backend/Dockerfile
+          push: true
+          tags: ghcr.io/lsqz712/pcb-backend:latest
+          cache-from: type=registry,ref=ghcr.io/lsqz712/pcb-backend:buildcache
+          cache-to: type=registry,ref=ghcr.io/lsqz712/pcb-backend:buildcache,mode=max

@@ -1,5 +1,4 @@
 @use './variables.scss' as *;
-@use './phro-cursor.scss' as phro-cursor;
 
 @mixin phro-hover-accent {
   border-color: rgba($phro-gold, 0.5);
@@ -44,7 +43,7 @@
 
   &:disabled {
     opacity: 0.45;
-    @include phro-cursor.phro-cursor-not-allowed;
+    cursor: not-allowed;
   }
 }
 
@@ -216,7 +215,7 @@
 
   &:disabled {
     opacity: 0.45;
-    @include phro-cursor.phro-cursor-not-allowed;
+    cursor: not-allowed;
   }
 }
 
@@ -225,7 +224,7 @@
   background: $phro-btn-bg;
   border: $phro-divider-width solid $phro-border;
   border-radius: $phro-radius-sm;
-  @include phro-cursor.phro-cursor-pointer;
+  cursor: pointer;
   font-family: inherit;
   transition: background 0.2s, color 0.2s, box-shadow 0.2s, border-color 0.2s;
   appearance: none;
@@ -239,7 +238,7 @@
   color: $phro-text-deep;
   font-family: inherit;
   font-size: 14px;
-  @include phro-cursor.phro-cursor-text;
+  cursor: text;
 
   &::placeholder {
     color: $phro-text-mid;

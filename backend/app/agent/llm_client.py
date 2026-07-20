@@ -34,10 +34,8 @@ class LLMClient:
     def generate(self, messages: List[Dict[str, str]], **kwargs) -> str:
         if self.use_ollama:
             model = kwargs.get("model", settings.OLLAMA_MODEL_NAME)
-        elif settings.QWEN_API_KEY and not settings.LLM_API_KEY:
-            model = kwargs.get("model", settings.QWEN_MODEL)
         else:
-            model = kwargs.get("model", settings.LLM_MODEL_NAME)
+            model = kwargs.get("model", settings.effective_llm_model)
         temperature = kwargs.get("temperature", settings.LLM_TEMPERATURE)
         max_tokens = kwargs.get("max_tokens", settings.LLM_MAX_TOKENS)
 
@@ -66,10 +64,8 @@ class LLMClient:
     def generate_stream(self, messages: List[Dict[str, str]], **kwargs) -> Iterator[str]:
         if self.use_ollama:
             model = kwargs.get("model", settings.OLLAMA_MODEL_NAME)
-        elif settings.QWEN_API_KEY and not settings.LLM_API_KEY:
-            model = kwargs.get("model", settings.QWEN_MODEL)
         else:
-            model = kwargs.get("model", settings.LLM_MODEL_NAME)
+            model = kwargs.get("model", settings.effective_llm_model)
         temperature = kwargs.get("temperature", settings.LLM_TEMPERATURE)
         max_tokens = kwargs.get("max_tokens", settings.LLM_MAX_TOKENS)
 
@@ -105,10 +101,8 @@ class LLMClient:
     def generate_with_tools(self, messages: List[Dict[str, str]], tools: List[Dict[str, Any]], **kwargs) -> Dict[str, Any]:
         if self.use_ollama:
             model = kwargs.get("model", settings.OLLAMA_MODEL_NAME)
-        elif settings.QWEN_API_KEY and not settings.LLM_API_KEY:
-            model = kwargs.get("model", settings.QWEN_MODEL)
         else:
-            model = kwargs.get("model", settings.LLM_MODEL_NAME)
+            model = kwargs.get("model", settings.effective_llm_model)
         temperature = kwargs.get("temperature", settings.LLM_TEMPERATURE)
 
         try:

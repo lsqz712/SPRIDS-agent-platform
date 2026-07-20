@@ -75,23 +75,37 @@ function onDrop(e) {
   @include phro.phro-module-box;
   border-style: dashed;
   border-width: 2px;
-  padding: 28px 20px;
+  border-color: rgba($phro-gold, 0.2);
+  padding: 16px 12px;
   text-align: center;
   cursor: pointer;
-  transition: border-color 0.2s, background 0.2s;
+  transition: all 0.3s ease;
+  min-height: 50px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border-radius: $phro-radius;
+  background: rgba($phro-panel-bg, 0.6);
+  backdrop-filter: blur(4px);
 
   &:hover:not(.is-disabled) {
-    border-color: rgba($phro-gold, 0.55);
-    background: rgba($phro-panel-bg, 0.95);
+    border-color: rgba($phro-gold, 0.5);
+    background: rgba($phro-gold, 0.08);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba($phro-gold, 0.1);
   }
 
   &.is-dragover {
     border-color: $phro-gold;
     background: rgba($phro-gold, 0.12);
+    box-shadow: 0 0 16px rgba($phro-gold, 0.25);
+    transform: scale(1.02);
   }
 
   &.is-disabled {
-    opacity: 0.55;
+    opacity: 0.5;
     cursor: not-allowed;
   }
 }
@@ -101,20 +115,25 @@ function onDrop(e) {
 }
 
 .upload-icon {
-  font-size: 36px;
+  font-size: 24px;
   color: $phro-gold;
-  margin-bottom: 10px;
+  transition: transform 0.3s ease;
+
+  .image-uploader:hover & {
+    transform: scale(1.1);
+  }
 }
 
 .upload-title {
-  margin: 0 0 6px;
-  font-size: 14px;
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
   color: $phro-text-deep;
 }
 
 .upload-hint {
   margin: 0;
-  font-size: 12px;
-  color: $phro-text-mid;
+  font-size: 11px;
+  color: $phro-text-warm;
 }
 </style>

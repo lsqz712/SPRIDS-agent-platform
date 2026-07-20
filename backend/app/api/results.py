@@ -1,4 +1,4 @@
-﻿"""
+"""
 检测结果 API 路由
 - GET    /api/results/{id}                 单条检测结果详情
 - PUT    /api/results/{id}/review          人工复判（需认证）
@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 
 from app.database.session import get_db
 from app.api.deps import get_current_user, get_current_active_user
+from app.api.utils import success_response
 from app.entity.db_models import User
 from app.entity.schemas import (
     ResultReviewRequest,
@@ -23,7 +24,7 @@ from app.services.result_service import result_service
 router = APIRouter(prefix="/api/results", tags=["检测结果"])
 
 
-@router.get("/{result_id}", response_model=dict)
+@router.get("/{result_id}")
 async def get_result(
     result_id: int,
     db: Session = Depends(get_db),
@@ -62,14 +63,10 @@ async def get_result(
         "created_at": result.created_at,
     }
 
-    return {
-        "code": 200,
-        "message": "success",
-        "data": result_data,
-    }
+    return success_response(data=result_data)
 
 
-@router.put("/{result_id}/review", response_model=dict)
+@router.put("/{result_id}/review")
 async def update_result_review(
     result_id: int,
     data: ResultReviewRequest,
@@ -103,25 +100,21 @@ async def update_result_review(
         repair_suggestion=data.repair_suggestion,
     )
 
-    return {
-        "code": 200,
-        "message": "复判成功",
-        "data": {
-            "id": result.id,
-            "review_status": result.review_status.value
-            if hasattr(result.review_status, "value")
-            else result.review_status,
-            "severity": result.severity.value
-            if hasattr(result.severity, "value")
-            else result.severity,
-            "reviewer_id": result.reviewer_id,
-            "reviewed_at": result.reviewed_at,
-            "repair_suggestion": result.repair_suggestion,
-        },
-    }
+    return success_response(data={
+        "id": result.id,
+        "review_status": result.review_status.value
+        if hasattr(result.review_status, "value")
+        else result.review_status,
+        "severity": result.severity.value
+        if hasattr(result.severity, "value")
+        else result.severity,
+        "reviewer_id": result.reviewer_id,
+        "reviewed_at": result.reviewed_at,
+        "repair_suggestion": result.repair_suggestion,
+    }, message="复判成功")
 
 
-@router.put("/{result_id}/severity", response_model=dict)
+@router.put("/{result_id}/severity")
 async def update_result_severity(
     result_id: int,
     data: ResultSeverityRequest,
@@ -141,19 +134,15 @@ async def update_result_severity(
         severity=data.severity,
     )
 
-    return {
-        "code": 200,
-        "message": "缺陷等级标注成功",
-        "data": {
-            "id": result.id,
-            "severity": result.severity.value
-            if hasattr(result.severity, "value")
-            else result.severity,
-        },
-    }
+    return success_response(data={
+        "id": result.id,
+        "severity": result.severity.value
+        if hasattr(result.severity, "value")
+        else result.severity,
+    }, message="缺陷等级标注成功")
 
 
-@router.get("/{result_id}/repair-suggestion", response_model=dict)
+@router.get("/{result_id}/repair-suggestion")
 async def get_repair_suggestion(
     result_id: int,
     db: Session = Depends(get_db),
@@ -168,14 +157,10 @@ async def get_repair_suggestion(
         db=db, result_id=result_id
     )
 
-    return {
-        "code": 200,
-        "message": "success",
-        "data": suggestion_data,
-    }
+    return success_response(data=suggestion_data)
 
 
-@router.put("/{result_id}/repair-suggestion", response_model=dict)
+@router.put("/{result_id}/repair-suggestion")
 async def update_repair_suggestion(
     result_id: int,
     data: ResultRepairSuggestionRequest,
@@ -192,11 +177,7 @@ async def update_repair_suggestion(
         repair_suggestion=data.repair_suggestion,
     )
 
-    return {
-        "code": 200,
-        "message": "维修建议更新成功",
-        "data": {
-            "id": result.id,
-            "repair_suggestion": result.repair_suggestion,
-        },
-    }
+    return success_response(data={
+        "id": result.id,
+        "repair_suggestion": result.repair_suggestion,
+    }, message="维修建议更新成功")

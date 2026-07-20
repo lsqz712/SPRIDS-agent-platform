@@ -10,6 +10,7 @@
 """
 
 from fastapi import APIRouter
+from app.api.utils import success_response
 from app.config.settings import settings
 from app.core.logger import get_logger
 logger = get_logger(__name__)
@@ -21,15 +22,11 @@ async def health_check():
     ⽤途：Docker liveness probe、负载均衡器探活
     特点：不检查外部依赖，只确认应⽤进程存活
     """
-    return {
-        "code": 200,
-        "message": "ok",
-        "data": {
-            "status": "healthy",
-            "app_name": settings.APP_NAME,
-            "version": settings.APP_VERSION,
-        },
-    }
+    return success_response(data={
+        "status": "healthy",
+        "app_name": settings.APP_NAME,
+        "version": settings.APP_VERSION,
+    }, message="ok")
 @router.get("/detail")
 async def health_check_detail():
     """
@@ -38,19 +35,16 @@ async def health_check_detail():
     特点：逐⼀检测 PostgreSQL、Redis、MinIO 连通性
     """
     services = {}
-    # ── 检查 PostgreSQL ──────────────────────────────
     try:
         from sqlalchemy import text
         from app.database.session import SessionLocal
         db = SessionLocal()
-        # 执⾏最简单的查询验证连接（SQLAlchemy 2.x 语法）
         db.execute(text("SELECT 1"))
         db.close()
         services["database"] = {"status": "healthy", "message": "PostgreSQL 连接正常"}
     except Exception as e:
         services["database"] = {"status": "unhealthy", "message": f"PostgreSQL 连接失败: {str(e)}"}
         logger.error("PostgreSQL 健康检查失败: %s", str(e))
-    # ── 检查 Redis ───────────────────────────────────
     try:
         import redis
         r = redis.from_url(settings.REDIS_URL)
@@ -60,7 +54,6 @@ async def health_check_detail():
     except Exception as e:
         services["redis"] = {"status": "unhealthy", "message": f"Redis 连接失败: {str(e)}"}
         logger.error("Redis 健康检查失败: %s", str(e))
-    # ── 检查 MinIO ───────────────────────────────────
     try:
         from app.storage.minio_client import MinIOClient
         minio = MinIOClient()
@@ -69,15 +62,10 @@ async def health_check_detail():
     except Exception as e:
         services["minio"] = {"status": "unhealthy", "message": f"MinIO 连接失败: {str(e)}"}
         logger.error("MinIO 健康检查失败: %s", str(e))
-# ── 汇总状态 ─────────────────────────────────────
     all_healthy = all(s["status"] == "healthy" for s in services.values())
-    return {
-        "code": 200,
-        "message": "ok",
-        "data": {
-            "status": "healthy" if all_healthy else "degraded",
-            "app_name": settings.APP_NAME,
-            "version": settings.APP_VERSION,
-            "services": services,
-        },
-    }
+    return success_response(data={
+        "status": "healthy" if all_healthy else "degraded",
+        "app_name": settings.APP_NAME,
+        "version": settings.APP_VERSION,
+        "services": services,
+    }, message="ok")

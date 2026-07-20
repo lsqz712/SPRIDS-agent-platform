@@ -47,34 +47,6 @@
         </el-icon>
         <span class="app-sidebar-label">{{ item.title }}</span>
       </router-link>
-
-      <div
-        class="app-sidebar-group"
-        :class="{ 'is-expanded': toolMenu.activeSection === 'pet' }"
-      >
-        <div
-          ref="petAnchorRef"
-          class="app-sidebar-item app-sidebar-item--parent app-sidebar-pet-toggle"
-          :class="{ active: petStore.visible }"
-        >
-          <el-icon class="app-sidebar-icon">
-            <MagicStick />
-          </el-icon>
-          <span class="app-sidebar-label app-sidebar-parent-label">弗洛洛桌宠</span>
-
-          <button
-            type="button"
-            class="app-sidebar-expand-toggle"
-            :aria-expanded="toolMenu.activeSection === 'pet'"
-            :aria-label="toolMenu.activeSection === 'pet' ? '收起桌宠子菜单' : '在右侧展开桌宠子菜单'"
-            @click.stop="toggleToolMenu('pet')"
-          >
-            <el-icon class="app-sidebar-expand-icon">
-              <ArrowRight />
-            </el-icon>
-          </button>
-        </div>
-      </div>
     </nav>
 
     <div class="app-sidebar-footer">
@@ -121,7 +93,6 @@ import {
   Cpu,
   Clock,
   DataAnalysis,
-  MagicStick,
   Document,
   Box,
   CollectionTag,
@@ -129,7 +100,6 @@ import {
 import PhroUserAvatar from '@/components/common/PhroUserAvatar.vue'
 import { useUserStore } from '@/stores/user'
 import { useAppToolMenuStore } from '@/stores/appToolMenu'
-import { usePhrolovaPetStore } from '@/stores/phrolovaPet'
 
 defineProps({
   feixunTheme: {
@@ -142,10 +112,8 @@ const route = useRoute()
 const router = useRouter()
 const userStore = useUserStore()
 const toolMenu = useAppToolMenuStore()
-const petStore = usePhrolovaPetStore()
 
 const feixunAnchorRef = ref(null)
-const petAnchorRef = ref(null)
 const userAnchorRef = ref(null)
 
 const activeMenu = computed(() => `/${route.path.split('/')[1]}`)
@@ -166,11 +134,10 @@ function goToChat() {
   }
 }
 
-/** @param {'feixun' | 'pet' | 'user'} section */
+/** @param {'feixun' | 'user'} section */
 async function toggleToolMenu(section) {
   const anchorMap = {
     feixun: feixunAnchorRef.value,
-    pet: petAnchorRef.value,
     user: userAnchorRef.value,
   }
   await nextTick()
@@ -179,8 +146,6 @@ async function toggleToolMenu(section) {
 </script>
 
 <style lang="scss" scoped>
-@use '@/assets/styles/phro-cursor.scss' as phro-cursor;
-
 .app-sidebar {
   position: relative;
   z-index: 210;
@@ -256,7 +221,7 @@ async function toggleToolMenu(section) {
   box-sizing: border-box;
   width: 100%;
   padding-right: 36px;
-  @include phro-cursor.phro-cursor-pointer;
+  cursor: pointer;
 }
 
 .app-sidebar-parent-label {
@@ -277,7 +242,7 @@ async function toggleToolMenu(section) {
   margin: 0;
   border: none;
   background: transparent;
-  @include phro-cursor.phro-cursor-pointer;
+  cursor: pointer;
   color: rgba($phro-gold, 0.82);
   appearance: none;
 }
@@ -301,7 +266,7 @@ async function toggleToolMenu(section) {
   border-radius: $phro-radius;
   color: $phro-text-deep;
   text-decoration: none;
-  @include phro-cursor.phro-cursor-pointer;
+  cursor: pointer;
   transition: box-shadow 0.2s, border-color 0.2s, color 0.2s;
   -webkit-user-drag: none;
   user-select: none;
@@ -326,11 +291,6 @@ async function toggleToolMenu(section) {
       font-weight: 600;
     }
   }
-}
-
-.app-sidebar-pet-toggle {
-  width: 100%;
-  box-sizing: border-box;
 }
 
 .app-sidebar-icon {

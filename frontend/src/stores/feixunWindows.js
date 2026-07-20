@@ -17,7 +17,7 @@ const LEGACY_SESSIONS_KEY = 'phrolova_chat_sessions'
 
 const STICKY_STACK_ORIGIN = { left: 24, top: 24 }
 const DEFAULT_STICKY_FAN_STEP = { x: 88, y: 0 }
-const STICKY_FALLBACK_SIZE = { width: 960, height: 680 }
+const STICKY_FALLBACK_SIZE = { width: 1200, height: 750 }
 
 function resolveStickyRefSize(windows, snapshots = {}) {
   for (const window of windows) {

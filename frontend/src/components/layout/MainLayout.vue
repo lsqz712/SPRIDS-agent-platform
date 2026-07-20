@@ -2,7 +2,6 @@
   <div class="main-layout">
     <div class="layout-body layout-body--feixun">
       <div class="layout-feixun-bg" aria-hidden="true" />
-      <PhrolovaPet />
       <AppRightToolbar />
       <PhroContextMenu />
       <AppSidebar feixun-theme />
@@ -29,7 +28,7 @@
 </template>
 
 <script setup>
-import { computed, defineAsyncComponent, onMounted, onUnmounted } from 'vue'
+import { computed, onMounted, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import AppSidebar from './AppSidebar.vue'
 import AppRightToolbar from './AppRightToolbar.vue'
@@ -37,14 +36,6 @@ import PhroContextMenu from '@/components/common/PhroContextMenu.vue'
 import { usePhroContextMenuStore } from '@/stores/phroContextMenu'
 import { buildTextContextMenuItems } from '@/utils/phroTextContextMenu'
 import { useUserStore } from '@/stores/user'
-
-const PhrolovaPet = defineAsyncComponent({
-  loader: () => import('@/components/pet/PhrolovaPet.vue'),
-  onError(error, _retry, fail) {
-    console.error('[PhrolovaPet] component load failed', error)
-    fail()
-  },
-})
 
 const router = useRouter()
 const route = useRoute()
@@ -98,8 +89,6 @@ function exitToLogin() {
 </script>
 
 <style lang="scss" scoped>
-@use '@/assets/styles/phro-cursor.scss' as phro-cursor;
-
 .main-layout {
   width: 100%;
   height: 100%;
@@ -132,7 +121,7 @@ function exitToLogin() {
       -webkit-user-select: text;
     }
 
-    > :not(.layout-feixun-bg):not(.phrolova-pet-root):not(.app-sidebar) {
+    > :not(.layout-feixun-bg):not(.app-sidebar) {
       position: relative;
       z-index: 1;
     }
@@ -149,12 +138,6 @@ function exitToLogin() {
   inset: 0;
   background: url('/login-bg.jpg') center / cover no-repeat fixed;
   z-index: 0;
-  pointer-events: none;
-}
-
-:deep(.phrolova-pet-root) {
-  position: fixed;
-  z-index: 200;
   pointer-events: none;
 }
 
@@ -191,7 +174,7 @@ function exitToLogin() {
   background: rgba(32, 6, 14, 0.55);
   border: 1px solid rgba(212, 175, 120, 0.35);
   border-radius: 16px;
-  @include phro-cursor.phro-cursor-pointer;
+  cursor: pointer;
   backdrop-filter: blur(6px);
   -webkit-backdrop-filter: blur(6px);
   transition: all 0.2s;

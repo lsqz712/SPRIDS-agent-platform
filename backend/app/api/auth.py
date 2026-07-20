@@ -6,8 +6,10 @@
 """
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from fastapi.security import OAuth2PasswordBearer
-from jose import JWTError
 from sqlalchemy.orm import Session
+
+from app.api.deps import get_current_user
+from app.api.utils import success_response
 from app.core.security import decode_access_token
 from app.database.session import get_db
 from app.entity.schemas import (
@@ -40,28 +42,7 @@ def serialize_user(user, roles: list[str]) -> dict:
     }
 
 
-async def get_current_user(
-    token: str = Depends(oauth2_scheme),
-    db: Session = Depends(get_db),
-):
-    credentials_exception = HTTPException(
-        status_code=401,
-        detail="无效的认证凭据",
-        headers={"WWW-Authenticate": "Bearer"},
-    )
-    try:
-        payload = decode_access_token(token)
-        user_id_str: str = payload.get("sub")
-        if user_id_str is None:
-            raise credentials_exception
-        user_id = int(user_id_str)
-    except (JWTError, ValueError):
-        raise credentials_exception
-
-    return user_service.get_user_by_id(db, user_id)
-
-
-@router.post("/register", response_model=UserResponse, status_code=201)
+@router.post("/register", status_code=201)
 async def register(request: UserRegister, db: Session = Depends(get_db)):
     user = user_service.register(
         db=db,
@@ -69,7 +50,7 @@ async def register(request: UserRegister, db: Session = Depends(get_db)):
         email=request.email,
         password=request.password,
     )
-    return {
+    return success_response(data={
         "id": user.id,
         "username": user.username,
         "email": user.email,
@@ -80,10 +61,10 @@ async def register(request: UserRegister, db: Session = Depends(get_db)):
         "roles": [],
         "last_login_at": user.last_login_at,
         "created_at": user.created_at,
-    }
+    }, message="注册成功")
 
 
-@router.post("/login", response_model=TokenResponse)
+@router.post("/login")
 async def login(request: UserLogin, db: Session = Depends(get_db)):
     user = user_service.login(
         db=db,
@@ -92,7 +73,7 @@ async def login(request: UserLogin, db: Session = Depends(get_db)):
     )
     access_token = user_service.create_access_token_for_user(user)
     roles = user_service.get_user_roles(db, user)
-    return {
+    return success_response(data={
         "access_token": access_token,
         "token_type": "bearer",
         "user": {
@@ -102,19 +83,19 @@ async def login(request: UserLogin, db: Session = Depends(get_db)):
             "avatar": user.avatar,
             "roles": roles,
         },
-    }
+    }, message="登录成功")
 
 
-@router.get("/me", response_model=UserResponse)
+@router.get("/me")
 async def get_current_user_info(
     current_user=Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     roles = user_service.get_user_roles(db, current_user)
-    return serialize_user(current_user, roles)
+    return success_response(data=serialize_user(current_user, roles))
 
 
-@router.patch("/me", response_model=UserResponse)
+@router.patch("/me")
 async def update_current_user_info(
     request: UserUpdate,
     current_user=Depends(get_current_user),
@@ -123,10 +104,10 @@ async def update_current_user_info(
     payload = request.model_dump(exclude_unset=True)
     user = user_service.update_profile(db, current_user, payload)
     roles = user_service.get_user_roles(db, user)
-    return serialize_user(user, roles)
+    return success_response(data=serialize_user(user, roles), message="更新成功")
 
 
-@router.post("/change-password", status_code=204)
+@router.post("/change-password")
 async def change_current_user_password(
     request: ChangePassword,
     current_user=Depends(get_current_user),
@@ -138,9 +119,10 @@ async def change_current_user_password(
         request.old_password,
         request.new_password,
     )
+    return success_response(message="密码修改成功")
 
 
-@router.post("/me/avatar", response_model=UserResponse)
+@router.post("/me/avatar")
 async def upload_current_user_avatar(
     file: UploadFile = File(...),
     current_user=Depends(get_current_user),
@@ -148,4 +130,4 @@ async def upload_current_user_avatar(
 ):
     user = await user_service.upload_avatar(db, current_user, file)
     roles = user_service.get_user_roles(db, user)
-    return serialize_user(user, roles)
+    return success_response(data=serialize_user(user, roles), message="头像上传成功")

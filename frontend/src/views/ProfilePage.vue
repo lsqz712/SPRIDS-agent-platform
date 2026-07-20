@@ -474,7 +474,6 @@ onMounted(() => {
 
 <style lang="scss" scoped>
 @use '@/assets/styles/phro-theme.scss' as phro;
-@use '@/assets/styles/phro-cursor.scss' as phro-cursor;
 
 .profile-board {
   flex: 1;
@@ -509,11 +508,11 @@ onMounted(() => {
   padding: 0;
   border: none;
   background: transparent;
-  @include phro-cursor.phro-cursor-pointer;
+  cursor: pointer;
   border-radius: 50%;
 
   &:disabled {
-    @include phro-cursor.phro-cursor-not-allowed;
+    cursor: not-allowed;
   }
 
   &:hover:not(:disabled) .profile-avatar-mask,

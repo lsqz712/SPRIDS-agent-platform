@@ -5,18 +5,28 @@
   - POST /api/detection/batch      批量检测
   - POST /api/detection/zip        ZIP ⽂件检测
   - POST /api/detection/video      视频检测
+  - GET  /api/detection/video/status/:id 查询视频检测进度
   - GET  /api/detection/scenes     获取检测场景列表
   - GET  /api/detection/cameras    枚举摄像头设备
   - GET  /api/detection/status/:id 查询任务状态
   - GET  /api/detection/tasks/:id  获取检测任务详情
+  - WS   /api/detection/camera     摄像头实时检测
 """
 import os
+import json
+import base64
+import time
+import threading
 import tempfile
-from fastapi import APIRouter, Depends, File, Form, UploadFile, status
+import cv2
+import numpy as np
+from datetime import datetime
+from fastapi import APIRouter, Depends, File, Form, UploadFile, WebSocket, WebSocketDisconnect, status
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 
-from app.api.auth import get_current_user
+from app.api.deps import get_current_user
+from app.api.utils import success_response
 from app.core.logger import get_logger
 from app.database.session import get_db
 from app.entity.schemas import SceneResponse
@@ -27,7 +37,7 @@ logger = get_logger(__name__)
 router = APIRouter(prefix="/api/detection", tags=["快捷检测"])
 
 
-@router.get("/scenes", response_model=list[SceneResponse])
+@router.get("/scenes")
 async def get_detection_scenes(
     category: str = None,
     is_active: bool = None,
@@ -49,7 +59,7 @@ async def get_detection_scenes(
         scene_dict["default_model"] = scene_service.get_scene_statistics(db, scene).get("default_model")
         results.append(SceneResponse(**scene_dict))
     
-    return results
+    return success_response(data=results)
 
 
 @router.post("/single", summary="单图检测")
@@ -58,6 +68,7 @@ async def detect_single_api(
     conf: float = Form(0.25, description="置信度阈值"),
     scene_id: int = Form(None, description="场景 ID"),
     current_user=Depends(get_current_user),
+    db: Session = Depends(get_db),
 ):
     """快捷单图检测（跳过 LLM，直接调⽤ YOLO）"""
     suffix = os.path.splitext(file.filename)[1] or ".jpg"
@@ -66,14 +77,57 @@ async def detect_single_api(
         tmp.write(content)
         tmp_path = tmp.name
     try:
+        user_id = current_user.id if current_user else None
+
+        task = detection_service.create_single_task(
+            db=db,
+            scene_id=scene_id or 1,
+            user_id=user_id,
+            conf_threshold=conf,
+            source="quick",
+        )
+
         result = detection_service.detect_single(
             image_path=tmp_path,
             conf=conf,
             scene_id=scene_id,
-            user_id=current_user.id,
+            user_id=user_id,
         )
+
+        defects = result.get("defects", [])
+        total_objects = len(defects)
+        total_inference_time = result.get("inference_time", 0)
+
+        results_data = []
+        for defect in defects:
+            results_data.append({
+                "image_path": file.filename,
+                "annotated_image_url": None,
+                "class_name": defect.get("class_name"),
+                "class_name_cn": defect.get("class_name_cn"),
+                "class_id": defect.get("class_id"),
+                "confidence": defect.get("confidence"),
+                "bbox": defect.get("bbox"),
+                "inference_time": defect.get("inference_time"),
+                "image_width": result.get("image_width"),
+                "image_height": result.get("image_height"),
+            })
+
+        if results_data:
+            detection_service.save_results_batch(db=db, task_id=task.id, results_data=results_data)
+
+        task.total_images = 1
+        task.total_objects = total_objects
+        task.total_inference_time = total_inference_time
+        task.status = "completed"
+        task.completed_at = datetime.now()
+        db.commit()
+        db.refresh(task)
+
         result["filename"] = file.filename
-        return result
+        result["task_id"] = task.id
+        result["task_status"] = task.status.value if hasattr(task.status, "value") else task.status
+        return success_response(data=result, message="检测完成")
     finally:
         os.unlink(tmp_path)
 
@@ -84,23 +138,75 @@ async def detect_batch_api(
     conf: float = Form(0.25),
     scene_id: int = Form(None),
     current_user=Depends(get_current_user),
+    db: Session = Depends(get_db),
 ):
     """快捷批量检测"""
     temp_paths = []
+    file_names = []
     try:
+        user_id = current_user.id if current_user else None
+
+        task = detection_service.create_batch_task(
+            db=db,
+            scene_id=scene_id or 1,
+            user_id=user_id,
+            conf_threshold=conf,
+            image_count=len(files),
+            source="quick",
+        )
+
         for file in files:
             suffix = os.path.splitext(file.filename)[1] or ".jpg"
             with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
                 content = await file.read()
                 tmp.write(content)
                 temp_paths.append(tmp.name)
+                file_names.append(file.filename)
+
         result = detection_service.detect_batch(
             image_paths=temp_paths,
             conf=conf,
             scene_id=scene_id,
-            user_id=current_user.id,
+            user_id=user_id,
         )
-        return result
+
+        results_data = []
+        total_objects = 0
+        total_inference_time = 0
+
+        for idx, r in enumerate(result.get("results", [])):
+            image_name = file_names[idx] if idx < len(file_names) else r.get("image_path", f"image_{idx}")
+            defects = r.get("defects", [])
+            total_objects += len(defects)
+            total_inference_time += r.get("inference_time", 0)
+
+            for defect in defects:
+                results_data.append({
+                    "image_path": image_name,
+                    "annotated_image_url": None,
+                    "class_name": defect.get("class_name"),
+                    "class_name_cn": defect.get("class_name_cn"),
+                    "class_id": defect.get("class_id"),
+                    "confidence": defect.get("confidence"),
+                    "bbox": defect.get("bbox"),
+                    "inference_time": defect.get("inference_time"),
+                    "image_width": r.get("image_width"),
+                    "image_height": r.get("image_height"),
+                })
+
+        if results_data:
+            detection_service.save_results_batch(db=db, task_id=task.id, results_data=results_data)
+
+        task.total_objects = total_objects
+        task.total_inference_time = total_inference_time
+        task.status = "completed"
+        task.completed_at = datetime.now()
+        db.commit()
+        db.refresh(task)
+
+        result["task_id"] = task.id
+        result["task_status"] = task.status.value if hasattr(task.status, "value") else task.status
+        return success_response(data=result, message="批量检测完成")
     finally:
         for path in temp_paths:
             try:
@@ -129,7 +235,7 @@ async def detect_zip_api(
             scene_id=scene_id,
             user_id=current_user.id,
         )
-        return result
+        return success_response(data=result, message="ZIP检测完成")
     finally:
         os.unlink(tmp_path)
 
@@ -142,7 +248,7 @@ async def get_detection_status(
 ):
     """查询检测任务状态"""
     task = detection_service.get_task_by_id(db=db, task_id=task_id)
-    return {
+    return success_response(data={
         "task_id": task.id,
         "status": task.status.value if hasattr(task.status, "value") else task.status,
         "task_type": task.task_type,
@@ -152,7 +258,7 @@ async def get_detection_status(
             task.completed_at.isoformat() if task.completed_at else None
         ),
         "created_at": task.created_at.isoformat() if task.created_at else None,
-    }
+    })
 
 
 @router.post("/video", summary="视频检测")
@@ -163,24 +269,77 @@ async def detect_video_api(
     frame_interval: int = Form(10, description="检测帧间隔"),
     current_user=Depends(get_current_user),
 ):
-    """视频检测（按帧间隔采样检测）"""
-    suffix = os.path.splitext(file.filename)[1] or ".mp4"
-    with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
+    """视频检测：上传后异步处理，通过 status 接口轮询进度"""
+    _VIDEO_EXTENSIONS = {".mp4", ".avi", ".mov", ".mkv", ".wmv", ".flv"}
+    suffix = os.path.splitext(file.filename)[1].lower() if file.filename else ""
+    if suffix not in _VIDEO_EXTENSIONS:
+        return JSONResponse(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            content={"error": f"不支持的视频格式: {suffix}，支持: {', '.join(sorted(_VIDEO_EXTENSIONS))}"},
+        )
+
+    project_tmp = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "temp")
+    os.makedirs(project_tmp, exist_ok=True)
+    with tempfile.NamedTemporaryFile(suffix=suffix, delete=False, dir=project_tmp) as tmp:
         content = await file.read()
         tmp.write(content)
         tmp_path = tmp.name
-    try:
-        result = detection_service.detect_video(
-            video_path=tmp_path,
-            conf=conf,
-            scene_id=scene_id,
-            user_id=current_user.id,
-            frame_interval=frame_interval,
-        )
-        result["filename"] = file.filename
-        return result
-    finally:
-        os.unlink(tmp_path)
+
+    from app.storage.redis_client import redis_client
+    task_id = detection_service.create_video_task(
+        user_id=current_user.id, scene_id=scene_id or 1, conf=conf)
+
+    redis_client.set_json(f"video_task:{task_id}", {
+        "status": "PROCESSING", "progress": 0, "message": "视频处理中..."
+    }, expire=3600)
+
+    def _run():
+        try:
+            result = detection_service.detect_video(
+                video_path=tmp_path, conf=conf, scene_id=scene_id,
+                user_id=current_user.id, frame_interval=frame_interval,
+                task_id=task_id,
+            )
+            if "error" in result:
+                redis_client.set_json(f"video_task:{task_id}", {
+                    "status": "FAILED", "progress": 0, "message": result["error"]
+                }, expire=3600)
+            else:
+                redis_client.set_json(f"video_task:{task_id}", {
+                    "status": "COMPLETED", "progress": 100,
+                    "message": f"检测完成，{result.get('processed_frames',0)}帧，{result.get('total_objects',0)}个目标",
+                    "result": result,
+                }, expire=3600)
+        except Exception as e:
+            redis_client.set_json(f"video_task:{task_id}", {
+                "status": "FAILED", "progress": 0, "message": str(e)
+            }, expire=3600)
+        finally:
+            try: os.unlink(tmp_path)
+            except: pass
+
+    threading.Thread(target=_run, daemon=True).start()
+
+    return success_response(data={
+        "task_id": task_id, "status": "PROCESSING",
+        "message": "视频已上传，后台处理中，请通过 status 接口轮询",
+        "filename": file.filename,
+    }, message="视频上传成功")
+
+
+@router.get("/video/status/{task_id}", summary="查询视频检测进度")
+async def get_video_detection_status(task_id: int, db: Session = Depends(get_db)):
+    """查询视频检测任务进度（Redis优先 → DB回退）."""
+    from app.storage.redis_client import redis_client
+    cached = redis_client.get_json(f"video_task:{task_id}")
+    if cached:
+        return success_response(data={"task_id": task_id, **cached})
+    task = detection_service.get_task_by_id(db, task_id)
+    return success_response(data={
+        "task_id": task.id, "status": task.status.value if hasattr(task.status, "value") else task.status,
+        "total_objects": task.total_objects, "total_inference_time": task.total_inference_time,
+        "message": task.error_message or "",
+    })
 
 
 @router.get("/cameras", summary="枚举摄像头设备")
@@ -189,10 +348,7 @@ async def list_camera_devices_api(
 ):
     """枚举可用的摄像头设备（包括USB连接的手机摄像头）"""
     devices = detection_service.list_cameras()
-    return {
-        "success": True,
-        "devices": devices,
-    }
+    return success_response(data={"devices": devices})
 
 
 @router.get("/tasks/{task_id}", summary="获取检测任务详情")
@@ -202,21 +358,160 @@ async def get_detection_task_detail(
     current_user=Depends(get_current_user),
 ):
     """获取检测任务详情及结果"""
+    from app.entity.db_models import DetectionResult
     task = detection_service.get_task_by_id(db=db, task_id=task_id)
-    return {
-        "id": task.id,
-        "user_id": task.user_id,
-        "scene_id": task.scene_id,
-        "scene_name": task.scene.display_name if task.scene else None,
-        "model_version_id": task.model_version_id,
-        "task_type": task.task_type,
-        "status": task.status.value if hasattr(task.status, "value") else task.status,
-        "total_images": task.total_images,
-        "total_objects": task.total_objects,
-        "total_inference_time": task.total_inference_time,
-        "conf_threshold": task.conf_threshold,
-        "iou_threshold": task.iou_threshold,
-        "error_message": task.error_message,
-        "created_at": task.created_at.isoformat() if task.created_at else None,
-        "completed_at": task.completed_at.isoformat() if task.completed_at else None,
-    }
+    results = db.query(DetectionResult).filter(DetectionResult.task_id == task_id).all()
+    class_counts = {}
+    for r in results:
+        class_counts[r.class_name] = class_counts.get(r.class_name, 0) + 1
+    key_frames = []
+    if task.analysis_report:
+        try:
+            report = json.loads(task.analysis_report) if isinstance(task.analysis_report, str) else task.analysis_report
+            key_frames = report if isinstance(report, list) else report.get("key_frames", [])
+        except: pass
+    return success_response(data={
+        "task": {
+            "id": task.id, "user_id": task.user_id, "scene_id": task.scene_id,
+            "scene_name": task.scene.display_name if task.scene else None,
+            "model_version_id": task.model_version_id, "task_type": task.task_type,
+            "status": task.status.value if hasattr(task.status, "value") else task.status,
+            "total_images": task.total_images, "total_objects": task.total_objects,
+            "total_inference_time": task.total_inference_time,
+            "conf_threshold": task.conf_threshold, "iou_threshold": task.iou_threshold,
+            "error_message": task.error_message,
+            "created_at": task.created_at.isoformat() if task.created_at else None,
+            "completed_at": task.completed_at.isoformat() if task.completed_at else None,
+        },
+        "class_counts": class_counts,
+        "results": [{"id": r.id, "class_name": r.class_name, "class_name_cn": r.class_name_cn,
+                      "class_id": r.class_id, "confidence": r.confidence, "bbox": r.bbox,
+                      "image_path": r.image_path, "inference_time": r.inference_time}
+                     for r in results],
+        "key_frames": key_frames,
+    })
+
+
+_camera_frame_buffer = {}
+
+@router.websocket("/camera")
+async def camera_detection_ws(websocket: WebSocket):
+    """摄像头实时检测 WebSocket（config/frame/close协议）"""
+    from app.core.security import decode_access_token
+    from jose import JWTError
+
+    token = websocket.query_params.get("token")
+    if not token: await websocket.close(code=4001); return
+    try:
+        payload = decode_access_token(token)
+        uid = int(payload.get("sub", 0))
+        if not uid: raise JWTError("Invalid")
+    except (JWTError, ValueError): await websocket.close(code=4001); return
+
+    await websocket.accept()
+    connection_id = id(websocket)
+    logger.info("Camera WS connected: id=%d user=%d", connection_id, uid)
+    mode = "cpu"; conf = 0.25; iou = 0.45; model = None
+    scene_id = None; total_objects = 0; class_counts = {}; snapshot_frames = []
+    frame_count = 0; fps_start_time = time.time(); fps_frame_count = 0
+
+    async def _finalize_and_notify():
+        nonlocal total_objects, class_counts, snapshot_frames
+        try:
+            result = detection_service.save_camera_session(
+                user_id=uid, scene_id=scene_id or 1,
+                conf=conf, iou=iou,
+                total_objects=total_objects,
+                class_counts=class_counts,
+                snapshot_frames=snapshot_frames,
+            )
+            await websocket.send_json({
+                "type": "close_ok", "task_id": result["task_id"],
+                "total_objects": result["total_objects"],
+                "class_counts": result["class_counts"],
+            })
+        except Exception as e:
+            logger.error("Camera session save error: %s", str(e))
+
+    try:
+        while True:
+            data = await websocket.receive_json()
+            msg_type = data.get("type")
+
+            if msg_type == "config":
+                mode = data.get("mode", "cpu"); conf = data.get("conf", 0.25)
+                iou = data.get("iou", 0.45); scene_id = data.get("scene_id")
+                try:
+                    model = detection_service._get_model(scene_id)
+                    dummy = np.zeros((480, 640, 3), dtype=np.uint8)
+                    model.predict(source=dummy, conf=conf, iou=iou, imgsz=640,
+                                  device="cpu" if mode == "cpu" else "0", save=False, verbose=False)
+                    logger.info("Camera model warmed up, mode: %s", mode)
+                except Exception as e:
+                    logger.error("Camera model load failed: %s", str(e))
+                    await websocket.send_json({"type": "error", "message": f"Model load failed: {str(e)}"})
+                    continue
+                await websocket.send_json({"type": "config_ok", "mode": mode, "message": f"Config OK, mode: {mode}"})
+
+            elif msg_type == "frame":
+                if model is None:
+                    await websocket.send_json({"type": "error", "message": "Send config first"}); continue
+                frame_b64 = data.get("data", "")
+                if not frame_b64: continue
+                try:
+                    img_bytes = base64.b64decode(frame_b64)
+                    nparr = np.frombuffer(img_bytes, np.uint8)
+                    frame = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+                    if frame is None: continue
+                    device = "cpu" if mode == "cpu" else "0"
+                    imgsz = 416 if mode == "cpu" else 640
+                    results = model.predict(source=frame, conf=conf, iou=iou, imgsz=imgsz,
+                                            device=device, save=False, verbose=False, half=False)
+                    result = results[0]
+                    inference_time = float(result.speed.get("inference", 0))
+                    annotated_img = result.plot()
+                    _, buffer = cv2.imencode(".jpg", annotated_img, [cv2.IMWRITE_JPEG_QUALITY, 70])
+                    annotated_b64 = base64.b64encode(buffer).decode("utf-8")
+                    detections = []
+                    if result.boxes is not None and len(result.boxes) > 0:
+                        for box in result.boxes:
+                            cls_id = int(box.cls[0])
+                            cls_name = model.names.get(cls_id, f"class_{cls_id}")
+                            cf = float(box.conf[0])
+                            x1, y1, x2, y2 = box.xyxy[0].tolist()
+                            detections.append({"class_name": cls_name, "class_id": cls_id,
+                                               "confidence": round(cf, 4),
+                                               "bbox": [round(x1, 1), round(y1, 1), round(x2, 1), round(y2, 1)]})
+                            total_objects += 1
+                            class_counts[cls_name] = class_counts.get(cls_name, 0) + 1
+                        if len(snapshot_frames) < 10:
+                            snapshot_frames.append(annotated_b64)
+                    fps_frame_count += 1
+                    elapsed = time.time() - fps_start_time
+                    current_fps = round(fps_frame_count / elapsed, 1) if elapsed >= 1.0 else 0
+                    if elapsed >= 1.0: fps_frame_count = 0; fps_start_time = time.time()
+                    frame_count += 1
+                    await websocket.send_json({
+                        "type": "result", "annotated_frame": annotated_b64,
+                        "detections": detections, "object_count": len(detections),
+                        "inference_time": round(inference_time, 2),
+                        "fps": current_fps, "frame_count": frame_count,
+                    })
+                except Exception as e:
+                    logger.error("Camera frame error: %s", str(e))
+                    await websocket.send_json({"type": "error", "message": str(e)})
+
+            elif msg_type == "close":
+                logger.info("Camera WS closed by client: id=%d", connection_id)
+                await _finalize_and_notify()
+                await websocket.close()
+                return
+
+    except WebSocketDisconnect:
+        logger.info("Camera WS disconnected: id=%d", connection_id)
+        await _finalize_and_notify()
+    except Exception as e:
+        logger.error("Camera WS error: %s", str(e), exc_info=True)
+    finally:
+        _camera_frame_buffer.pop(connection_id, None)
+        logger.info("Camera WS ended: id=%d, frames=%d", connection_id, frame_count)

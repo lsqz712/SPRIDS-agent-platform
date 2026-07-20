@@ -39,86 +39,6 @@
           </button>
         </template>
 
-        <template v-else-if="section === 'pet'">
-          <div class="app-tool-flyout__pet-body">
-            <div class="app-tool-flyout__pet-columns">
-              <div
-                v-for="(columnSections, columnIndex) in petMenuColumns"
-                :key="columnIndex"
-                class="app-tool-flyout__pet-column"
-                :class="{ 'app-tool-flyout__pet-column--left': columnIndex === 0 }"
-              >
-                <section
-                  v-for="menuSection in columnSections"
-                  :key="menuSection.id"
-                  class="app-tool-flyout__pet-section"
-                >
-                  <h4 class="app-tool-flyout__section-title">{{ menuSection.title }}</h4>
-                  <div class="app-tool-flyout__pet-list">
-                    <button
-                      v-for="item in menuSection.items"
-                      :key="item.id"
-                      type="button"
-                      class="app-tool-flyout__chip"
-                      :class="{
-                        'app-tool-flyout__chip--toggle': item.kind === 'toggle',
-                        'app-tool-flyout__chip--reset': item.kind === 'reset',
-                        'is-on': item.kind === 'toggle' && isPetToggleOn(item),
-                      }"
-                      :disabled="!canControlPet"
-                      :title="petChipTitle(item)"
-                      @click="handlePetAction(item)"
-                    >
-                      <template v-if="item.kind === 'toggle'">
-                        <span class="app-tool-flyout__chip-label">{{ item.label }}</span>
-                        <span class="app-tool-flyout__chip-state">
-                          {{ isPetToggleOn(item) ? '开' : '关' }}
-                        </span>
-                      </template>
-                      <template v-else>
-                        {{ item.label }}
-                      </template>
-                    </button>
-                  </div>
-                </section>
-
-                <section
-                  v-if="columnIndex === 0"
-                  class="app-tool-flyout__pet-section app-tool-flyout__pet-section--visibility"
-                >
-                  <h4 class="app-tool-flyout__section-title">隐藏</h4>
-                  <div class="app-tool-flyout__pet-list">
-                    <button
-                      type="button"
-                      class="app-tool-flyout__chip app-tool-flyout__chip--visibility"
-                      :class="{ 'is-on': petStore.visible }"
-                      @click="petStore.toggle()"
-                    >
-                      <span class="app-tool-flyout__chip-label">
-                        {{ petStore.visible ? '隐藏桌宠' : '显示桌宠' }}
-                      </span>
-                    </button>
-                  </div>
-                </section>
-              </div>
-            </div>
-
-            <section class="app-tool-flyout__pet-section app-tool-flyout__pet-section--size">
-              <h4 class="app-tool-flyout__section-title">大小</h4>
-              <input
-                type="range"
-                class="app-tool-flyout__pet-size-slider"
-                min="0"
-                max="100"
-                step="1"
-                :value="petStore.sizeLevel"
-                aria-label="桌宠大小"
-                @input="onPetSizeLevelInput"
-              />
-            </section>
-          </div>
-        </template>
-
         <template v-else>
           <button
             type="button"
@@ -171,17 +91,12 @@ import {
   FLYOUT_WIDTH,
 } from '@/utils/appToolFlyoutLayout'
 import { usePhroBubbleClip } from '@/composables/usePhroBubbleClip'
-import { PHROLOVA_PET_MENU_SECTIONS, buildDefaultToggleStates } from '@/utils/phrolovaPetMenu'
 import { showPhroConfirm } from '@/utils/phroMessageBox'
 import { useAppToolMenuStore } from '@/stores/appToolMenu'
 import { useFeixunWindowsStore } from '@/stores/feixunWindows'
-import { usePhrolovaPetStore } from '@/stores/phrolovaPet'
 import { useUserStore } from '@/stores/user'
 
-/** @typedef {'feixun' | 'pet' | 'user'} AppToolMenuSection */
-
-const LEFT_PET_SECTION_IDS = ['decoration', 'animation']
-const RIGHT_PET_SECTION_IDS = ['expression', 'form', 'settings']
+/** @typedef {'feixun' | 'user'} AppToolMenuSection */
 
 const props = defineProps({
   section: {
@@ -195,7 +110,6 @@ const route = useRoute()
 const router = useRouter()
 const toolMenu = useAppToolMenuStore()
 const windowsStore = useFeixunWindowsStore()
-const petStore = usePhrolovaPetStore()
 const userStore = useUserStore()
 
 const rootRef = ref(null)
@@ -205,13 +119,6 @@ const layoutStable = ref(false)
 
 const isChatRoute = computed(() => route.path.startsWith('/chat'))
 const isProfileRoute = computed(() => route.path.startsWith('/profile'))
-const canControlPet = computed(() => petStore.visible && !!petStore.runtime)
-
-const petMenuColumns = computed(() => {
-  const left = PHROLOVA_PET_MENU_SECTIONS.filter((section) => LEFT_PET_SECTION_IDS.includes(section.id))
-  const right = PHROLOVA_PET_MENU_SECTIONS.filter((section) => RIGHT_PET_SECTION_IDS.includes(section.id))
-  return [left, right]
-})
 
 const layout = computed(() => {
   const anchor = toolMenu.anchors[props.section]
@@ -235,47 +142,6 @@ const bubbleStyle = computed(() => ({
   '--arrow-top': `${layout.value.arrowTop}px`,
   ...clipStyle.value,
 }))
-
-/** @param {import('@/utils/phrolovaPetMenu').PhrolovaPetMenuAction} item */
-function isPetToggleOn(item) {
-  if (item.kind !== 'toggle') return false
-  return petStore.toggleStates[item.id] ?? item.defaultOn !== false
-}
-
-/** @param {import('@/utils/phrolovaPetMenu').PhrolovaPetMenuAction} item */
-function petChipTitle(item) {
-  if (item.hint) return item.hint
-  if (item.kind === 'toggle') {
-    return `${item.label}：${isPetToggleOn(item) ? '开（点击关闭）' : '关（点击开启）'}`
-  }
-  return item.label
-}
-
-/** @param {import('@/utils/phrolovaPetMenu').PhrolovaPetMenuAction} action */
-function handlePetAction(action) {
-  if (action.kind === 'reset') {
-    petStore.resetSizeLevel()
-    if (!petStore.runtime) {
-      petStore.setToggleStates(buildDefaultToggleStates())
-      return
-    }
-  } else if (!petStore.visible) {
-    ElMessage.warning('请先显示桌宠')
-    return
-  } else if (!petStore.runtime) {
-    ElMessage.warning('桌宠正在加载，请稍后再试')
-    return
-  }
-
-  petStore.runMenuAction(action)
-}
-
-/** @param {Event} event */
-function onPetSizeLevelInput(event) {
-  const target = event.target
-  if (!(target instanceof HTMLInputElement)) return
-  petStore.setSizeLevel(Number(target.value))
-}
 
 function measurePanelHeight() {
   const bubble = bubbleRef.value
@@ -367,7 +233,6 @@ function confirmLogout() {
 </script>
 
 <style lang="scss" scoped>
-@use '@/assets/styles/phro-cursor.scss' as phro-cursor;
 @use '@/assets/styles/phro-theme.scss' as phro-theme;
 
 .app-tool-flyout {
@@ -416,7 +281,7 @@ function confirmLogout() {
   background: rgba($phro-panel-bg, 0.92);
   color: $phro-text-deep;
   text-align: left;
-  @include phro-cursor.phro-cursor-pointer;
+  cursor: pointer;
   appearance: none;
   transition: box-shadow 0.2s, border-color 0.2s;
 
@@ -464,124 +329,5 @@ function confirmLogout() {
   min-width: 0;
   font-size: 12px;
   line-height: 1.35;
-}
-
-.app-tool-flyout__pet-body {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  min-width: 0;
-}
-
-.app-tool-flyout__pet-columns {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  align-items: stretch;
-  gap: 8px;
-  min-width: 0;
-}
-
-.app-tool-flyout__pet-column {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  min-width: 0;
-
-  &--left {
-    .app-tool-flyout__pet-section--visibility {
-      margin-top: auto;
-    }
-  }
-}
-
-.app-tool-flyout__section-title {
-  margin: 0 0 4px;
-  font-size: 11px;
-  font-weight: 600;
-  color: $phro-gold-light;
-  letter-spacing: 0.04em;
-  text-shadow: 0 1px 4px rgba(20, 0, 8, 0.45);
-}
-
-.app-tool-flyout__pet-list {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.app-tool-flyout__chip {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  width: 100%;
-  padding: 5px 8px;
-  border: 1px solid rgba($phro-gold, 0.2);
-  border-radius: 6px;
-  background: rgba($phro-panel-bg, 0.9);
-  color: $phro-text-deep;
-  font-size: 11px;
-  line-height: 1.3;
-  @include phro-cursor.phro-cursor-pointer;
-  appearance: none;
-  transition: border-color 0.15s ease, background 0.15s ease;
-
-  &:hover:not(:disabled) {
-    border-color: rgba($phro-gold, 0.45);
-    background: rgba($phro-panel-bg, 1);
-  }
-
-  &--toggle {
-    justify-content: space-between;
-  }
-
-  &--reset {
-    justify-content: center;
-    color: $phro-text-mid;
-  }
-
-  &--visibility {
-    justify-content: center;
-  }
-
-  &.is-on {
-    border-color: rgba($phro-gold, 0.55);
-    box-shadow: inset 2px 0 0 rgba($phro-gold, 0.85);
-  }
-
-  &:disabled {
-    opacity: 0.45;
-    @include phro-cursor.phro-cursor-not-allowed;
-  }
-}
-
-.app-tool-flyout__chip-label {
-  font-size: 11px;
-}
-
-.app-tool-flyout__chip-state {
-  min-width: 14px;
-  font-size: 10px;
-  font-weight: 600;
-  color: $phro-text-mid;
-  text-align: right;
-
-  .is-on & {
-    color: rgba($phro-gold, 0.95);
-  }
-}
-
-.app-tool-flyout__pet-size-slider {
-  display: block;
-  width: 100%;
-  height: 4px;
-  margin: 0;
-  accent-color: rgba($phro-gold, 0.85);
-  @include phro-cursor.phro-cursor-pointer;
-}
-
-.app-tool-flyout__pet-section--size {
-  flex-shrink: 0;
-  padding-top: 2px;
-  border-top: 1px solid rgba($phro-rose, 0.14);
 }
 </style>

@@ -8,17 +8,18 @@
 - PUT  /api/models/versions/{id}/set-default 设置为默认模型
 """
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import desc
 from app.database.session import get_db
-from app.api.auth import get_current_user
+from app.api.deps import get_current_user
+from app.api.utils import success_response
 from app.entity.db_models import User, ModelVersion, DetectionScene
 from app.entity.schemas import ModelVersionCreate, ModelVersionResponse
 import os
 
 router = APIRouter(prefix="/api/models", tags=["模型管理"])
 
-@router.post("/versions", response_model=ModelVersionResponse, status_code=201)
+@router.post("/versions", status_code=201)
 async def create_model_version(
     request: ModelVersionCreate,
     db: Session = Depends(get_db),
@@ -56,19 +57,21 @@ async def create_model_version(
     db.commit()
     db.refresh(new_model)
     
-    return ModelVersionResponse(
+    return success_response(data=ModelVersionResponse(
         **new_model.__dict__,
         scene_name=scene.display_name
-    )
+    ), message="模型版本创建成功")
 
-@router.get("/versions", response_model=list[ModelVersionResponse])
+@router.get("/versions")
 async def get_model_versions(
     scene_id: int = None,
     status: str = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    query = db.query(ModelVersion)
+    query = db.query(ModelVersion).options(
+        joinedload(ModelVersion.scene)
+    )
     
     if scene_id:
         query = query.filter(ModelVersion.scene_id == scene_id)
@@ -80,39 +83,40 @@ async def get_model_versions(
     
     results = []
     for model in models:
-        scene = db.query(DetectionScene).filter(DetectionScene.id == model.scene_id).first()
         results.append(ModelVersionResponse(
             **model.__dict__,
-            scene_name=scene.display_name if scene else None
+            scene_name=model.scene.display_name if model.scene else None
         ))
     
-    return results
+    return success_response(data=results)
 
-@router.get("/versions/{model_id}", response_model=ModelVersionResponse)
+@router.get("/versions/{model_id}")
 async def get_model_version(
     model_id: int,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    model = db.query(ModelVersion).filter(ModelVersion.id == model_id).first()
+    model = db.query(ModelVersion).options(
+        joinedload(ModelVersion.scene)
+    ).filter(ModelVersion.id == model_id).first()
     if not model:
         raise HTTPException(status_code=404, detail=f"模型版本 ID {model_id} 不存在")
     
-    scene = db.query(DetectionScene).filter(DetectionScene.id == model.scene_id).first()
-    
-    return ModelVersionResponse(
+    return success_response(data=ModelVersionResponse(
         **model.__dict__,
-        scene_name=scene.display_name if scene else None
-    )
+        scene_name=model.scene.display_name if model.scene else None
+    ))
 
-@router.put("/versions/{model_id}", response_model=ModelVersionResponse)
+@router.put("/versions/{model_id}")
 async def update_model_version(
     model_id: int,
     request: ModelVersionCreate,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    model = db.query(ModelVersion).filter(ModelVersion.id == model_id).first()
+    model = db.query(ModelVersion).options(
+        joinedload(ModelVersion.scene)
+    ).filter(ModelVersion.id == model_id).first()
     if not model:
         raise HTTPException(status_code=404, detail=f"模型版本 ID {model_id} 不存在")
     
@@ -140,10 +144,10 @@ async def update_model_version(
     db.commit()
     db.refresh(model)
     
-    return ModelVersionResponse(
+    return success_response(data=ModelVersionResponse(
         **model.__dict__,
         scene_name=scene.display_name
-    )
+    ), message="模型版本更新成功")
 
 @router.delete("/versions/{model_id}")
 async def delete_model_version(
@@ -158,7 +162,7 @@ async def delete_model_version(
     model.status = "deleted"
     db.commit()
     
-    return {"message": "模型版本已删除"}
+    return success_response(message="模型版本已删除")
 
 @router.put("/versions/{model_id}/set-default")
 async def set_default_model(
@@ -166,7 +170,9 @@ async def set_default_model(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    model = db.query(ModelVersion).filter(ModelVersion.id == model_id).first()
+    model = db.query(ModelVersion).options(
+        joinedload(ModelVersion.scene)
+    ).filter(ModelVersion.id == model_id).first()
     if not model:
         raise HTTPException(status_code=404, detail=f"模型版本 ID {model_id} 不存在")
     
@@ -179,9 +185,7 @@ async def set_default_model(
     db.commit()
     db.refresh(model)
     
-    scene = db.query(DetectionScene).filter(DetectionScene.id == model.scene_id).first()
-    
-    return ModelVersionResponse(
+    return success_response(data=ModelVersionResponse(
         **model.__dict__,
-        scene_name=scene.display_name if scene else None
-    )
+        scene_name=model.scene.display_name if model.scene else None
+    ), message="已设置为默认模型")

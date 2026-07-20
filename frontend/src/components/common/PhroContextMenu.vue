@@ -158,7 +158,6 @@ onUnmounted(() => {
 </script>
 
 <style lang="scss" scoped>
-@use '@/assets/styles/phro-cursor.scss' as phro-cursor;
 @use '@/assets/styles/phro-theme.scss' as phro-theme;
 
 .phro-context-menu-backdrop {
@@ -199,7 +198,7 @@ onUnmounted(() => {
 
 .phro-context-menu__item {
   @include phro-theme.phro-btn-base;
-  @include phro-cursor.phro-cursor-pointer;
+  cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: flex-start;
@@ -251,7 +250,7 @@ onUnmounted(() => {
 .phro-context-menu__item.is-disabled,
 .phro-context-menu__item:disabled {
   opacity: 0.45;
-  @include phro-cursor.phro-cursor-not-allowed;
+  cursor: not-allowed;
 }
 </style>
 

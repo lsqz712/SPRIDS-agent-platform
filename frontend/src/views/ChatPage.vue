@@ -199,7 +199,6 @@ onUnmounted(() => {
 </script>
 
 <style lang="scss" scoped>
-@use '@/assets/styles/phro-cursor.scss' as phro-cursor;
 
 .feixun-page {
   position: relative;
@@ -226,11 +225,11 @@ onUnmounted(() => {
   position: absolute;
   inset: 0;
   z-index: 0;
-  @include phro-cursor.phro-cursor-grab;
+  cursor: grab;
   touch-action: none;
 
   .feixun-page--dragging & {
-    @include phro-cursor.phro-cursor-grabbing;
+    cursor: grabbing;
   }
 }
 

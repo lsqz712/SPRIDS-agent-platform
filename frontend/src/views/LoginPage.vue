@@ -138,7 +138,6 @@ function enterDevPreview() {
 
 <style lang="scss" scoped>
 @use '@/assets/styles/phro-theme.scss' as phro;
-@use '@/assets/styles/phro-cursor.scss' as phro-cursor;
 
 .login-page {
   width: 100%;
@@ -202,7 +201,7 @@ function enterDevPreview() {
 
 .login-field {
   padding: 4px 12px;
-  @include phro-cursor.phro-cursor-text;
+  cursor: text;
 
   :deep(.el-form-item) {
     margin-bottom: 0;
@@ -222,7 +221,7 @@ function enterDevPreview() {
 }
 
 .login-btn:disabled {
-  @include phro-cursor.phro-cursor-not-allowed;
+  cursor: not-allowed;
 }
 
 .login-footer {
@@ -236,7 +235,7 @@ function enterDevPreview() {
     margin-left: 4px;
     font-weight: 500;
     text-decoration: none;
-    @include phro-cursor.phro-cursor-pointer;
+    cursor: pointer;
 
     &:hover {
       color: #f5d89a;
@@ -249,26 +248,26 @@ function enterDevPreview() {
 :deep(.el-input__wrapper),
 :deep(.el-input__prefix),
 :deep(.el-input__prefix-inner) {
-  @include phro-cursor.phro-cursor-text;
+  cursor: text;
 }
 
 :deep(.el-input__inner) {
   color: $phro-text-deep;
   font-family: inherit;
-  @include phro-cursor.phro-cursor-text;
+  cursor: text;
 }
 
 :deep(.el-input__suffix),
 :deep(.el-input__suffix-inner),
 :deep(.el-input__password) {
-  @include phro-cursor.phro-cursor-pointer;
+  cursor: pointer;
 }
 
 :deep(.el-input__prefix .el-icon),
 :deep(.el-input__prefix-inner .el-icon),
 :deep(.el-input__prefix .el-input__icon),
 :deep(.el-input__prefix-inner .el-input__icon) {
-  @include phro-cursor.phro-cursor-text;
+  cursor: text;
   pointer-events: none;
 }
 
@@ -306,7 +305,7 @@ function enterDevPreview() {
   background: rgba(32, 6, 14, 0.55);
   border: 1px solid rgba(212, 175, 120, 0.35);
   border-radius: 16px;
-  @include phro-cursor.phro-cursor-pointer;
+  cursor: pointer;
   backdrop-filter: blur(6px);
   -webkit-backdrop-filter: blur(6px);
   transition: all 0.2s;

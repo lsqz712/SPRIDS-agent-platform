@@ -28,3 +28,18 @@ export function detectVideoApi(formData) {
 export function getTaskDetailApi(taskId) {
   return request.get(`/detection/tasks/${taskId}`)
 }
+
+export function getCamerasApi() {
+  return request.get('/detection/cameras')
+}
+
+export function getVideoStatusApi(taskId) {
+  return request.get(`/detection/video/status/${taskId}`)
+}
+
+export function detectZipApi(formData) {
+  return request.post('/detection/zip', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+    timeout: 180000,
+  })
+}

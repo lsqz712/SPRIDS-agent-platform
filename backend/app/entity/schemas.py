@@ -8,8 +8,14 @@ Pydantic 请求/响应模型
   - List 模型：分⻚列表查询的参数和响应
 """
 from datetime import datetime
-from typing import Optional
+from typing import Optional, TypeVar, Generic, Any
 from pydantic import BaseModel, Field
+
+T = TypeVar('T')
+
+
+class ModelFieldBaseModel(BaseModel):
+    model_config = {"protected_namespaces": ()}
 # ══════════════════════════════════════════════════════════════
 # ⼀、⽤户与权限
 # ══════════════════════════════════════════════════════════════
@@ -115,7 +121,7 @@ class SceneResponse(BaseModel):
     created_at: datetime
     model_config = {"from_attributes": True}
 # --- 检测任务 --
-class DetectionTaskResponse(BaseModel):
+class DetectionTaskResponse(ModelFieldBaseModel):
     """检测任务响应"""
     id: int
     user_id: int
@@ -169,7 +175,7 @@ class DetectionStatistics(BaseModel):
 # 三、模型管理
 # ══════════════════════════════════════════════════════════════
 # --- 训练任务 --
-class TrainingTaskCreate(BaseModel):
+class TrainingTaskCreate(ModelFieldBaseModel):
     """创建训练任务"""
     scene_id: int = Field(..., description="关联场景 ID")
     model_name: str = Field(default="yolov11n", description="基础模型")
@@ -180,7 +186,7 @@ class TrainingTaskCreate(BaseModel):
     optimizer: str = Field(default="SGD", description="优化器")
     lr0: float = Field(default=0.01, description="初始学习率")
     augment_config: Optional[dict] = Field(None, description="数据增强配置")
-class TrainingTaskResponse(BaseModel):
+class TrainingTaskResponse(ModelFieldBaseModel):
     """训练任务响应"""
     id: int
     user_id: int
@@ -214,7 +220,7 @@ class TrainingMetricResponse(BaseModel):
     lr: Optional[float] = None
     model_config = {"from_attributes": True}
 # --- 模型版本 --
-class ModelVersionBrief(BaseModel):
+class ModelVersionBrief(ModelFieldBaseModel):
     """模型版本简要信息"""
     id: int
     version: str
@@ -223,8 +229,8 @@ class ModelVersionBrief(BaseModel):
     map50: Optional[float] = None
     is_default: bool
     created_at: datetime
-    model_config = {"from_attributes": True, "protected_namespaces": ()}
-class ModelVersionResponse(BaseModel):
+    model_config = {"from_attributes": True}
+class ModelVersionResponse(ModelFieldBaseModel):
     """ 模型版本详情"""
     id: int
     scene_id: int
@@ -245,8 +251,8 @@ class ModelVersionResponse(BaseModel):
     file_size: Optional[int] = None
     is_default: bool
     created_at: datetime
-    model_config = {"from_attributes": True, "protected_namespaces": ()}
-class ModelVersionCreate(BaseModel):
+    model_config = {"from_attributes": True}
+class ModelVersionCreate(ModelFieldBaseModel):
     """⼿动上传模型版本"""
     scene_id: int
     version: str = Field(..., description="版本号")
@@ -319,11 +325,11 @@ class OperationLogResponse(BaseModel):
 # ══════════════════════════════════════════════════════════════
 # 六、通⽤模型
 # ══════════════════════════════════════════════════════════════
-class ApiResponse(BaseModel):
+class ApiResponse(BaseModel, Generic[T]):
     """统⼀ API 响应"""
     code: int = 200
     message: str = "success"
-    data: Optional[dict | list] = None
+    data: Optional[T] = None
 class PageParams(BaseModel):
     """分⻚查询参数"""
     page: int = Field(default=1, ge=1, description="⻚码")
@@ -422,7 +428,7 @@ class BatchResponse(BaseModel):
     model_config = {"from_attributes": True}
 
 
-class DetectionSingleRequest(BaseModel):
+class DetectionSingleRequest(ModelFieldBaseModel):
     """单图检测请求"""
     scene_id: int = Field(..., description="检测场景 ID")
     model_version_id: Optional[int] = Field(None, description="指定模型版本 ID")

@@ -1,4 +1,4 @@
-﻿"""
+"""
 检测统计 API 路由
 - GET /api/statistics/overview             总览统计
 - GET /api/statistics/daily-trend          每日检测趋势
@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 
 from app.database.session import get_db
 from app.api.deps import get_current_active_user
+from app.api.utils import success_response
 from app.entity.db_models import User
 from app.entity.schemas import (
     OverviewStatistics,
@@ -25,7 +26,7 @@ from app.services.statistics_service import statistics_service
 router = APIRouter(prefix="/api/statistics", tags=["检测统计"])
 
 
-@router.get("/overview", response_model=dict)
+@router.get("/overview")
 async def get_overview(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user),
@@ -43,15 +44,10 @@ async def get_overview(
     - 各场景分布
     """
     data = statistics_service.get_overview(db=db)
-
-    return {
-        "code": 200,
-        "message": "success",
-        "data": OverviewStatistics(**data),
-    }
+    return success_response(data=OverviewStatistics(**data))
 
 
-@router.get("/daily-trend", response_model=dict)
+@router.get("/daily-trend")
 async def get_daily_trend(
     days: int = Query(default=30, ge=1, le=365, description="统计最近 N 天"),
     db: Session = Depends(get_db),
@@ -63,18 +59,10 @@ async def get_daily_trend(
     """
     raw_data = statistics_service.get_daily_trend(db=db, days=days)
     items = [DailyTrendItem(**item) for item in raw_data]
-
-    return {
-        "code": 200,
-        "message": "success",
-        "data": {
-            "days": days,
-            "items": items,
-        },
-    }
+    return success_response(data={"days": days, "items": items})
 
 
-@router.get("/defect-distribution", response_model=dict)
+@router.get("/defect-distribution")
 async def get_defect_distribution(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user),
@@ -87,15 +75,10 @@ async def get_defect_distribution(
     raw_data = statistics_service.get_defect_distribution(db=db)
     items = [DefectDistributionItem(**item) for item in raw_data["items"]]
     data = DefectDistributionResponse(items=items, total=raw_data["total"])
-
-    return {
-        "code": 200,
-        "message": "success",
-        "data": data,
-    }
+    return success_response(data=data)
 
 
-@router.get("/scene-distribution", response_model=dict)
+@router.get("/scene-distribution")
 async def get_scene_distribution(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user),
@@ -106,11 +89,4 @@ async def get_scene_distribution(
     """
     raw_data = statistics_service.get_scene_distribution(db=db)
     items = [SceneDistributionItem(**item) for item in raw_data]
-
-    return {
-        "code": 200,
-        "message": "success",
-        "data": {
-            "items": items,
-        },
-    }
+    return success_response(data={"items": items})

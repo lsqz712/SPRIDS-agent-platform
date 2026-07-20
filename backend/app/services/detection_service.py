@@ -4,6 +4,7 @@
 """
 import uuid
 import os
+import json
 import zipfile
 import tempfile
 from datetime import datetime
@@ -514,6 +515,65 @@ class DetectionService:
             return default_path
         
         raise HTTPException(status_code=500, detail="未找到可用的模型文件")
+
+    @staticmethod
+    def create_video_task(user_id: int, scene_id: int = None, conf: float = 0.25) -> int:
+        """创建视频检测任务（由 API 层调用）"""
+        db = SessionLocal()
+        try:
+            scene_id = DetectionService._resolve_scene_id(db, scene_id)
+            task = DetectionTask(user_id=user_id, scene_id=scene_id,
+                task_type="video", status=TaskStatus.PENDING, conf_threshold=conf)
+            db.add(task); db.flush(); task_id = task.id; db.commit()
+            return task_id
+        finally:
+            db.close()
+
+    @staticmethod
+    def _resolve_scene_id(db: Session, scene_id: int = None) -> int:
+        """解析场景 ID：未传入时自动查询第一个可用场景"""
+        if scene_id:
+            return scene_id
+        scene = db.query(DetectionScene).filter(DetectionScene.deleted_at == None).first()
+        if scene:
+            return scene.id
+        return 1
+
+    @staticmethod
+    def save_camera_session(user_id: int, scene_id: int, conf: float, iou: float,
+                            total_objects: int, class_counts: dict, snapshot_frames: list) -> dict:
+        """保存摄像头检测会话到数据库"""
+        db = SessionLocal()
+        try:
+            task = DetectionTask(user_id=user_id,
+                scene_id=DetectionService._resolve_scene_id(db, scene_id),
+                task_type="camera", status=TaskStatus.COMPLETED,
+                total_images=len(snapshot_frames), total_objects=total_objects,
+                conf_threshold=conf, iou_threshold=iou,
+                completed_at=datetime.now())
+            db.add(task); db.flush()
+            task.analysis_report = json.dumps(
+                {"class_counts": class_counts, "snapshot_frames": snapshot_frames},
+                ensure_ascii=False)
+            db.commit()
+            logger.info("Camera session saved: task_id=%d, objects=%d", task.id, total_objects)
+            return {"task_id": task.id, "total_objects": total_objects, "class_counts": class_counts}
+        except Exception as e:
+            logger.error("Camera session save error: %s", str(e))
+            db.rollback(); raise
+        finally:
+            db.close()
+
+    @staticmethod
+    def _get_model(scene_id: int = None):
+        """加载模型实例（用于摄像头等需要模型对象的场景）"""
+        from app.services.yolo_inference import load_model
+        db = SessionLocal()
+        try:
+            model_path = DetectionService._get_model_path(db, scene_id)
+            return load_model(model_path)
+        finally:
+            db.close()
 
 
 from app.database.session import SessionLocal

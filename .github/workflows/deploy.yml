@@ -1,0 +1,44 @@
+name: Deploy to Server
+
+# 在前端/后端镜像构建完成后触发部署
+on:
+  workflow_run:
+    workflows:
+      - "Build & Push Frontend Image"
+      - "Build & Push Backend Image"
+    branches: [main]
+    types: [completed]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # SCP推送 compose 文件到 /opt/pcb-web-platform
+      - name: Transfer docker-compose config via SCP
+        uses: appleboy/scp-action@master
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USERNAME }}
+          port: ${{ secrets.SERVER_PORT }}
+          password: ${{ secrets.SERVER_PASSWORD }}
+          source: "docker-compose.server.yml"
+          target: "/opt/pcb-web-platform/"
+
+      # 远程执行部署脚本
+      - name: Remote deploy command
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USERNAME }}
+          port: ${{ secrets.SERVER_PORT }}
+          password: ${{ secrets.SERVER_PASSWORD }}
+          script: |
+            cd /opt/pcb-web-platform
+            docker compose -f docker-compose.server.yml pull
+            docker compose -f docker-compose.server.yml up -d
+            docker image prune -f
+

@@ -56,7 +56,12 @@
             </el-tag>
           </div>
           <div class="task-info">
-            <div class="task-type">{{ task.task_type === 'single' ? '单图检测' : '批量检测' }}</div>
+            <div class="task-type">
+              {{ task.task_type === 'single' ? '单图检测' : '批量检测' }}
+              <el-tag :type="getSourceTagType(task.source)" size="mini" class="source-tag">
+                {{ getSourceLabel(task.source) }}
+              </el-tag>
+            </div>
             <div class="task-scene">{{ task.scene_name || '未知场景' }}</div>
           </div>
           <div class="task-stats">
@@ -114,7 +119,12 @@
           </div>
           <div class="detail-row">
             <span class="detail-label">任务类型</span>
-            <span class="detail-value">{{ selectedTask.task_type === 'single' ? '单图检测' : '批量检测' }}</span>
+            <span class="detail-value">
+              {{ selectedTask.task_type === 'single' ? '单图检测' : '批量检测' }}
+              <el-tag :type="getSourceTagType(selectedTask.source)" size="mini">
+                {{ getSourceLabel(selectedTask.source) }}
+              </el-tag>
+            </span>
           </div>
           <div class="detail-row">
             <span class="detail-label">检测场景</span>
@@ -258,6 +268,24 @@ function getStatusLabel(status) {
   return map[status] || status
 }
 
+function getSourceTagType(source) {
+  const map = {
+    quick: 'primary',
+    batch: 'success',
+    manual: 'info',
+  }
+  return map[source] || 'info'
+}
+
+function getSourceLabel(source) {
+  const map = {
+    quick: '快捷检测',
+    batch: '批次检测',
+    manual: '手动创建',
+  }
+  return map[source] || '未知来源'
+}
+
 function formatTime(seconds) {
   if (!seconds) return '-'
   if (seconds < 60) return `${seconds.toFixed(2)}s`
@@ -336,6 +364,12 @@ onMounted(loadTasks)
   margin-bottom: 12px;
   font-size: 13px;
   color: $phro-text-deep;
+
+  .task-type {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
 }
 
 .task-stats {

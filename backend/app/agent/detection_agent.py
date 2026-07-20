@@ -33,10 +33,62 @@ from app.database.session import SessionLocal
 from app.services.detection_service import detection_service
 from app.services.statistics_service import statistics_service
 from app.services.defect_type_service import defect_type_service
-from app.entity.db_models import TrainingTask, DetectionScene, PCBBatch
-from app.agent.memory import conversation_memory
+from app.entity.db_models import TrainingTask, DetectionScene, PCBBatch, ModelVersion, DetectionResult, DetectionTask, DefectType
+from app.agent.memory import conversation_memory, estimate_tokens, estimate_message_tokens, trim_messages_to_token_limit
 
 logger = get_logger(__name__)
+
+MAX_TOOL_OUTPUT_CHARS = 2000
+MAX_LIST_ITEMS = 5
+MAX_CONTEXT_TOKENS = 8000
+
+
+def compress_tool_output(data: dict) -> str:
+    """
+    压缩工具输出，减少 token 消耗。
+    
+    策略：
+    1. 列表类数据：只保留前 MAX_LIST_ITEMS 条 + total 计数
+    2. 移除 null/空字符串/空列表字段
+    3. 深度清理嵌套结构
+    4. 限制最终 JSON 长度不超过 MAX_TOOL_OUTPUT_CHARS
+    5. 优先保留关键字段（id、name、count 等）
+    """
+    PRIORITY_FIELDS = {"id", "name", "count", "total", "status", "confidence", "class_name", "result"}
+    
+    def clean_item(item, depth=0):
+        if depth > 3:
+            return str(item) if item else None
+        if isinstance(item, dict):
+            cleaned = {}
+            for k, v in item.items():
+                if v is None or v == "" or v == [] or v == {}:
+                    continue
+                if k in PRIORITY_FIELDS:
+                    cleaned[k] = clean_item(v, depth + 1)
+                elif depth < 2:
+                    cleaned[k] = clean_item(v, depth + 1)
+            return cleaned if cleaned else None
+        elif isinstance(item, list):
+            if depth == 0:
+                return [clean_item(i, depth + 1) for i in item[:MAX_LIST_ITEMS] if clean_item(i, depth + 1) is not None]
+            return [clean_item(i, depth + 1) for i in item[:3] if clean_item(i, depth + 1) is not None]
+        return item
+
+    cleaned_data = clean_item(data)
+    if cleaned_data is None:
+        cleaned_data = {}
+    
+    if "items" in cleaned_data and isinstance(cleaned_data["items"], list) and "total" not in cleaned_data:
+        if isinstance(data, dict) and "items" in data and isinstance(data["items"], list):
+            cleaned_data["total"] = len(data["items"])
+    
+    result = json.dumps(cleaned_data, ensure_ascii=False, default=str)
+    
+    if len(result) > MAX_TOOL_OUTPUT_CHARS:
+        result = result[:MAX_TOOL_OUTPUT_CHARS - 3] + "..."
+    
+    return result
 
 
 @tool
@@ -53,7 +105,7 @@ def detect_single_image(image_path: str, conf: float = 0.25, iou: float = 0.45) 
         JSON 字符串，包含检测结果（目标数量、类别统计、标注图路径）
     """
     result = detection_service.detect_single(image_path, conf=conf, iou=iou)
-    return json.dumps(result, ensure_ascii=False)
+    return compress_tool_output(result)
 
 
 @tool
@@ -69,7 +121,7 @@ def detect_batch_images(image_paths: list[str], conf: float = 0.25) -> str:
         JSON 字符串，包含每张图片的检测结果汇总
     """
     result = detection_service.detect_batch(image_paths, conf=conf)
-    return json.dumps(result, ensure_ascii=False)
+    return compress_tool_output(result)
 
 
 @tool
@@ -105,7 +157,7 @@ def get_statistics_overview() -> str:
     db = SessionLocal()
     try:
         data = statistics_service.get_overview(db=db)
-        return json.dumps(data, ensure_ascii=False, default=str)
+        return compress_tool_output(data)
     finally:
         db.close()
 
@@ -142,7 +194,7 @@ def get_defect_types(keyword: str = None, severity: str = None, is_active: bool 
                 "is_active": item.is_active,
                 "created_at": str(item.created_at),
             })
-        return json.dumps({"items": result, "total": len(result)}, ensure_ascii=False)
+        return compress_tool_output({"items": result, "total": len(result)})
     finally:
         db.close()
 
@@ -216,7 +268,7 @@ def get_task_detail(task_id: int) -> str:
             "created_at": str(task.created_at),
             "completed_at": str(task.completed_at) if task.completed_at else None,
         }
-        return json.dumps(task_data, ensure_ascii=False)
+        return compress_tool_output(task_data)
     finally:
         db.close()
 
@@ -298,7 +350,7 @@ def get_training_tasks() -> str:
                 "started_at": str(task.started_at) if task.started_at else None,
                 "completed_at": str(task.completed_at) if task.completed_at else None,
             })
-        return json.dumps({"items": result, "total": len(result)}, ensure_ascii=False)
+        return compress_tool_output({"items": result, "total": len(result)})
     finally:
         db.close()
 
@@ -324,7 +376,7 @@ def get_scenes() -> str:
                 "is_active": scene.is_active,
                 "created_at": str(scene.created_at),
             })
-        return json.dumps({"items": result, "total": len(result)}, ensure_ascii=False)
+        return compress_tool_output({"items": result, "total": len(result)})
     finally:
         db.close()
 
@@ -347,7 +399,268 @@ def get_batches() -> str:
                 "description": batch.description,
                 "created_at": str(batch.created_at),
             })
-        return json.dumps({"items": result, "total": len(result)}, ensure_ascii=False)
+        return compress_tool_output({"items": result, "total": len(result)})
+    finally:
+        db.close()
+
+
+@tool
+def get_model_info(model_id: int = None, scene_id: int = None) -> str:
+    """
+    查询模型版本信息，包括性能指标和适用场景。
+
+    Args:
+        model_id: 模型版本 ID（可选）
+        scene_id: 场景 ID（可选，查询该场景的所有模型）
+
+    Returns:
+        模型信息列表或单个模型详情
+    """
+    from sqlalchemy import desc
+    db = SessionLocal()
+    try:
+        if model_id:
+            model = db.query(ModelVersion).filter(ModelVersion.id == model_id).first()
+            if not model:
+                return json.dumps({"error": f"模型版本 ID {model_id} 不存在"}, ensure_ascii=False)
+            scene = db.query(DetectionScene).filter(DetectionScene.id == model.scene_id).first()
+            result = {
+                "model_id": model.id,
+                "version": model.version,
+                "model_name": model.model_name,
+                "model_type": model.model_type,
+                "status": model.status,
+                "scene_name": scene.display_name if scene else None,
+                "map50": model.map50,
+                "map50_95": model.map50_95,
+                "precision": model.precision,
+                "recall": model.recall,
+                "description": model.description,
+                "is_default": model.is_default,
+                "created_at": str(model.created_at) if model.created_at else None,
+            }
+            return json.dumps(result, ensure_ascii=False)
+        elif scene_id:
+            models = db.query(ModelVersion).filter(
+                ModelVersion.scene_id == scene_id
+            ).order_by(desc(ModelVersion.created_at)).all()
+            scene = db.query(DetectionScene).filter(DetectionScene.id == scene_id).first()
+            model_list = []
+            for model in models:
+                model_list.append({
+                    "model_id": model.id,
+                    "version": model.version,
+                    "model_name": model.model_name,
+                    "status": model.status,
+                    "map50": model.map50,
+                    "is_default": model.is_default,
+                })
+            result = {
+                "scene_name": scene.display_name if scene else None,
+                "total_models": len(model_list),
+                "models": model_list,
+            }
+            return compress_tool_output(result)
+        else:
+            models = db.query(ModelVersion).order_by(desc(ModelVersion.created_at)).all()
+            model_list = []
+            for model in models:
+                model_list.append({
+                    "model_id": model.id,
+                    "version": model.version,
+                    "model_name": model.model_name,
+                    "status": model.status,
+                    "map50": model.map50,
+                })
+            return compress_tool_output({"items": model_list, "total": len(model_list)})
+    finally:
+        db.close()
+
+
+@tool
+def analyze_defects(task_id: int = None, batch_id: int = None, time_range: str = None) -> str:
+    """
+    分析缺陷数据，生成统计报告和维修建议。
+
+    当用户需要分析缺陷分布、严重程度、风险等级或获取维修建议时使用此工具。
+
+    Args:
+        task_id: 检测任务 ID（可选）
+        batch_id: PCB 批次 ID（可选）
+        time_range: 时间范围，如 'today'/'week'/'month'（可选）
+
+    Returns:
+        缺陷分析报告，包含总数、类别分布、严重程度、风险分析和维修建议
+    """
+    from datetime import datetime, timedelta
+    db = SessionLocal()
+    try:
+        query = db.query(DetectionResult)
+        
+        if task_id:
+            query = query.filter(DetectionResult.task_id == task_id)
+        elif batch_id:
+            tasks = db.query(DetectionTask.id).filter(DetectionTask.batch_id == batch_id).subquery()
+            query = query.filter(DetectionResult.task_id.in_(tasks))
+        elif time_range:
+            end_time = datetime.now()
+            if time_range == "today":
+                start_time = end_time.replace(hour=0, minute=0, second=0, microsecond=0)
+            elif time_range == "week":
+                start_time = end_time - timedelta(days=7)
+            elif time_range == "month":
+                start_time = end_time - timedelta(days=30)
+            else:
+                start_time = end_time - timedelta(days=7)
+            tasks = db.query(DetectionTask.id).filter(
+                DetectionTask.created_at >= start_time
+            ).subquery()
+            query = query.filter(DetectionResult.task_id.in_(tasks))
+        
+        results = query.all()
+        if not results:
+            return json.dumps({"error": "未找到检测结果数据"}, ensure_ascii=False)
+        
+        class_distribution = {}
+        severity_distribution = {"minor": 0, "major": 0, "critical": 0}
+        image_set = set()
+        
+        for result in results:
+            class_name = result.class_name_cn or result.class_name
+            class_distribution[class_name] = class_distribution.get(class_name, 0) + 1
+            if result.severity:
+                severity_distribution[result.severity.value] += 1
+            else:
+                severity_distribution["major"] += 1
+            image_set.add(result.image_path)
+        
+        total_defects = len(results)
+        total_images = len(image_set)
+        
+        severity = severity_distribution
+        risk_level = "low"
+        if total_defects == 0:
+            risk_level = "low"
+        elif severity["critical"] > 0 or total_defects >= 20:
+            risk_level = "critical"
+        elif severity["major"] >= 5 or total_defects >= 10:
+            risk_level = "high"
+        elif severity["major"] > 0 or total_defects >= 5:
+            risk_level = "medium"
+        
+        risk_map = {
+            "critical": "高风险：存在致命缺陷，需立即停机排查",
+            "high": "较高风险：缺陷数量较多，建议加强抽检",
+            "medium": "中等风险：存在少量缺陷，需关注趋势",
+            "low": "低风险：质量状况良好",
+        }
+        
+        repair_map = {
+            "短路": {
+                "description": "PCB 上相邻导体之间出现意外导通",
+                "suggestion": "1. 检查焊锡量是否过多导致桥连\n2. 检查钢网开口是否过大\n3. 调整焊接温度曲线\n4. 检查 PCB 设计是否存在间距过小问题",
+                "severity": "critical",
+            },
+            "开路": {
+                "description": "预期导通的线路断开",
+                "suggestion": "1. 检查元件引脚是否氧化\n2. 检查焊锡量是否不足\n3. 检查回流温度是否足够\n4. 检查元件是否虚焊",
+                "severity": "critical",
+            },
+            "缺件": {
+                "description": "元件未贴装到 PCB 上",
+                "suggestion": "1. 检查贴片机吸嘴是否堵塞\n2. 检查供料器是否正常\n3. 检查元件是否用完\n4. 检查贴装坐标是否正确",
+                "severity": "major",
+            },
+            "偏移": {
+                "description": "元件贴装位置偏离",
+                "suggestion": "1. 检查贴片机精度\n2. 检查 PCB 定位是否准确\n3. 调整贴装压力\n4. 检查钢网与 PCB 对齐情况",
+                "severity": "major",
+            },
+            "焊点不良": {
+                "description": "焊点形状、光泽或质量不符合要求",
+                "suggestion": "1. 调整焊接温度曲线\n2. 检查助焊剂是否过期\n3. 检查焊锡品质\n4. 调整回流速度",
+                "severity": "minor",
+            },
+        }
+        
+        repair_suggestions = []
+        for defect_name, count in class_distribution.items():
+            if defect_name in repair_map:
+                repair_suggestions.append({
+                    "defect_type": defect_name,
+                    "count": count,
+                    "description": repair_map[defect_name]["description"],
+                    "suggestion": repair_map[defect_name]["suggestion"],
+                    "severity": repair_map[defect_name]["severity"],
+                })
+        
+        result = {
+            "total_defects": total_defects,
+            "total_images": total_images,
+            "defects_per_image": round(total_defects / max(total_images, 1), 2),
+            "class_distribution": class_distribution,
+            "severity_distribution": severity_distribution,
+            "risk_analysis": {
+                "level": risk_level,
+                "description": risk_map[risk_level],
+                "critical_count": severity["critical"],
+                "major_count": severity["major"],
+                "minor_count": severity["minor"],
+            },
+            "repair_suggestions": repair_suggestions,
+        }
+        
+        return json.dumps(result, ensure_ascii=False, default=str)
+    finally:
+        db.close()
+
+
+@tool
+def calculate_pass_rate(batch_id: int) -> str:
+    """
+    计算 PCB 批次的良品率。
+
+    Args:
+        batch_id: PCB 批次 ID
+
+    Returns:
+        批次良品率统计，包含总数、检测数、合格数、不合格数、良品率
+    """
+    db = SessionLocal()
+    try:
+        batch = db.query(PCBBatch).filter(PCBBatch.id == batch_id).first()
+        if not batch:
+            return json.dumps({"error": f"PCB 批次 ID {batch_id} 不存在"}, ensure_ascii=False)
+        
+        tasks = db.query(DetectionTask).filter(DetectionTask.batch_id == batch_id).all()
+        total_images = sum(task.total_images for task in tasks) if tasks else 0
+        total_defects = 0
+        defect_distribution = {}
+        
+        for task in tasks:
+            results = db.query(DetectionResult).filter(DetectionResult.task_id == task.id).all()
+            total_defects += len(results)
+            for result in results:
+                class_name = result.class_name_cn or result.class_name
+                defect_distribution[class_name] = defect_distribution.get(class_name, 0) + 1
+        
+        pass_count = max(total_images - total_defects, 0)
+        pass_rate = round((pass_count / max(total_images, 1)) * 100, 2)
+        
+        result = {
+            "batch_id": batch.id,
+            "batch_no": batch.batch_no if hasattr(batch, 'batch_no') else batch.name,
+            "pcb_type": batch.pcb_type if hasattr(batch, 'pcb_type') else None,
+            "total_count": batch.total_count if hasattr(batch, 'total_count') else None,
+            "inspected_count": total_images,
+            "pass_count": pass_count,
+            "fail_count": total_defects,
+            "pass_rate": pass_rate,
+            "defect_distribution": defect_distribution,
+            "status": batch.status,
+        }
+        
+        return json.dumps(result, ensure_ascii=False, default=str)
     finally:
         db.close()
 
@@ -358,6 +671,7 @@ def search_knowledge(query: str) -> str:
     搜索知识库，回答目标检测、YOLO、PCB检测等领域知识问题。
 
     当用户询问专业知识（如"什么是 IoU"、"YOLO 如何工作"、"PCB 缺陷类型"）时使用此工具。
+    使用混合检索（BM25 + 向量相似度）+ 重排序提升检索质量。
 
     Args:
         query: 用户的问题或搜索关键词
@@ -366,35 +680,10 @@ def search_knowledge(query: str) -> str:
         JSON 字符串，包含回答内容和来源信息
     """
     try:
-        from app.rag.retriever import knowledge_retriever
-        from app.rag.embedding import embedding_client
-        from app.agent.prompts import RAG_QA_PROMPT
-        from app.agent.llm_client import llm_client
+        from app.rag.retriever import rag_retriever
 
-        results = knowledge_retriever.retrieve(query)
-        if not results:
-            return json.dumps({
-                "success": True,
-                "answer": "知识库中暂无相关内容",
-                "sources": [],
-            }, ensure_ascii=False)
-
-        context = "\n\n".join([f"【来源{idx+1}】{r['content']}" for idx, r in enumerate(results)])
-        prompt = RAG_QA_PROMPT.format(context=context, question=query)
-        answer = llm_client.generate([{"role": "user", "content": prompt}])
-
-        sources = []
-        for r in results:
-            sources.append({
-                "filename": r["metadata"].get("filename", "unknown"),
-                "similarity": r["similarity"],
-            })
-
-        return json.dumps({
-            "success": True,
-            "answer": answer,
-            "sources": sources,
-        }, ensure_ascii=False)
+        result = rag_retriever.search(query, top_k=5, use_hybrid=True, use_rerank=True)
+        return json.dumps(result, ensure_ascii=False)
     except Exception as e:
         logger.error("知识库检索失败: %s", str(e))
         return json.dumps({"error": f"知识库检索失败: {str(e)}"}, ensure_ascii=False)
@@ -410,27 +699,23 @@ DETECTION_TOOLS = [
     get_task_detail,
     get_history_records,
     get_training_tasks,
+    get_model_info,
     get_scenes,
     get_batches,
+    analyze_defects,
+    calculate_pass_rate,
     search_knowledge,
 ]
 
 
 def create_llm():
-    qwen_api_key = getattr(settings, "QWEN_API_KEY", "")
-    if qwen_api_key and qwen_api_key != "sk-your-qwen-api-key":
-        api_key = qwen_api_key
-        base_url = getattr(
-            settings, "QWEN_BASE_URL", "https://dashscope.aliyuncs.com/compatible-mode/v1"
-        )
-        model_name = getattr(settings, "QWEN_MODEL", "qwen-plus")
-    else:
-        api_key = getattr(settings, "OPENAI_API_KEY", "")
-        if not api_key:
-            logger.warning("未配置 LLM API Key，将使用模拟模式")
-            return None
-        base_url = getattr(settings, "OPENAI_BASE_URL", "https://api.openai.com/v1")
-        model_name = getattr(settings, "OPENAI_MODEL", "gpt-4o-mini")
+    api_key = settings.effective_llm_api_key
+    if not api_key:
+        logger.warning("未配置 LLM API Key，将使用模拟模式")
+        return None
+
+    base_url = settings.effective_llm_base_url
+    model_name = settings.effective_llm_model
 
     return ChatOpenAI(
         model=model_name,
@@ -451,38 +736,19 @@ class DetectionAgent:
             logger.info("DetectionAgent 初始化完成（模拟模式），绑定 %d 个工具", len(DETECTION_TOOLS))
             return
 
-        system_prompt = """你是一个专业的PCB检测智能助手。你可以帮用户检测图片中的PCB缺陷，也可以查询系统中的各类数据，还能回答目标检测领域的专业知识问题。
+        system_prompt = """你是一个专业的PCB检测智能助手，帮助用户检测PCB缺陷、查询检测数据和回答领域知识问题。
 
-可用工具：
-1. 检测工具：
-   - detect_single_image：检测单张图片中的PCB缺陷
-   - detect_batch_images：批量检测多张图片
-   - detect_zip_images_file：检测ZIP文件中的所有图片
+工具调用规则：
+1. 消息含 [附件图片路径: xxx] → 调用检测工具
+2. 询问专业知识（IoU、YOLO等）→ 调用 search_knowledge
+3. 询问统计信息、任务记录、缺陷类型等 → 调用对应数据查询工具
+4. 无需工具时直接回答
 
-2. 数据查询工具：
-   - get_statistics_overview：获取数据看板总览统计（任务数、图像数、目标数、缺陷分布等）
-   - get_defect_types：获取缺陷类型列表（支持按关键词、严重等级筛选）
-   - get_task_list：获取检测任务列表（支持按状态、类型筛选）
-   - get_task_detail：获取单个任务的详细信息
-   - get_history_records：获取历史检测记录
-   - get_training_tasks：获取模型训练任务列表
-   - get_scenes：获取检测场景列表
-   - get_batches：获取PCB批次列表
-
-3. 知识问答工具：
-   - search_knowledge：搜索知识库，回答目标检测、YOLO、PCB检测等领域知识问题
-
-工具调用优先级：
-1. 如果消息中包含 [附件图片路径: xxx]，直接使用路径调用对应的检测工具
-2. 如果用户询问专业知识（如"什么是 IoU"、"YOLO 如何工作"），调用 search_knowledge
-3. 如果用户询问统计信息、任务记录、缺陷类型、训练状态等，调用相应的数据查询工具
-4. 如果不需要工具，直接用自身知识回答
-
-回复格式要求：
-- 检测结果：先报告总数 → 列出各类别数量 → 提及推理耗时
-- 知识问答：先给简洁定义 → 再补充关键细节 → 控制在 200 字以内
-- 统计数据：用数字说话 → 适当给出趋势判断
-- 语言风格：简洁专业，中文回复，不要过度解释"""
+回复要求：
+- 检测结果：总数→类别数量→推理耗时
+- 知识问答：简洁定义+关键细节（≤200字）
+- 统计数据：数字+趋势判断
+- 风格：简洁专业，中文回复"""
 
         prompt = ChatPromptTemplate.from_messages(
             [
@@ -515,8 +781,9 @@ class DetectionAgent:
 
         chat_history = []
         if session_id:
-            chat_history = conversation_memory.load_history(user_id, session_id)
-            logger.debug("加载对话历史: user=%d, session=%s, 消息数=%d", user_id, session_id, len(chat_history))
+            chat_history = conversation_memory.load_context_with_summary(user_id, session_id, MAX_CONTEXT_TOKENS)
+            logger.debug("加载对话历史(含摘要): user=%d, session=%s, 消息数=%d, tokens=%d", 
+                        user_id, session_id, len(chat_history), estimate_message_tokens(chat_history))
 
         if self.use_simulated_mode:
             result = self._simulate_chat(message, image_path)
@@ -552,7 +819,7 @@ class DetectionAgent:
 
         chat_history = []
         if session_id:
-            chat_history = conversation_memory.load_history(user_id, session_id)
+            chat_history = conversation_memory.load_context_with_summary(user_id, session_id, MAX_CONTEXT_TOKENS)
 
         if self.use_simulated_mode:
             async for event in self._simulate_chat_stream(message, image_path):

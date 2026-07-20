@@ -39,7 +39,7 @@
           <DetectionParams v-model="params" />
         </div>
 
-        <div class="phro-module phro-module--grow">
+        <div v-if="mode !== 'camera'" class="phro-module phro-module--grow">
           <h3 class="phro-module-title">上传</h3>
           <div class="phro-module-body">
           <ImageUploader
@@ -64,9 +64,36 @@
             hint="支持 MP4 / WEBM"
             @select="handleVideo"
           />
-          <div v-else class="camera-panel">
-            <video ref="videoRef" class="camera-video" autoplay playsinline muted />
-            <canvas ref="cameraCanvasRef" class="camera-overlay" />
+          <div v-if="loading" class="phro-module" style="margin-top:12px">
+            <div style="display:flex;align-items:center;gap:8px;color:#e67e22">
+              <span class="phro-spinner" /> 检测中...
+            </div>
+          </div>
+          <el-progress
+            v-if="videoProgress > 0 && videoProgress < 100"
+            :percentage="videoProgress"
+            :stroke-width="8"
+            class="video-progress"
+          />
+          </div>
+        </div>
+
+        <div v-else class="phro-module phro-module--grow">
+          <h3 class="phro-module-title">摄像头控制</h3>
+          <div class="camera-ctrl-panel">
+            <div v-if="cameraRunning" class="camera-stats-box">
+              <div class="cam-stat"><span class="cam-stat-val">{{ cameraFps }}</span><span class="cam-stat-lbl">实时 FPS</span></div>
+              <div class="cam-stat"><span class="cam-stat-val">{{ camFrameCount }}</span><span class="cam-stat-lbl">已处理帧</span></div>
+              <div class="cam-stat"><span class="cam-stat-val">{{ camInferenceTime }}</span><span class="cam-stat-lbl">推理耗时(ms)</span></div>
+              <div class="cam-stat"><span class="cam-stat-val">{{ camObjectCount }}</span><span class="cam-stat-lbl">当前目标数</span></div>
+            </div>
+            <div class="cam-mode-row">
+              <span class="cam-mode-label">推理模式</span>
+              <el-radio-group v-model="detectMode" :disabled="cameraRunning" size="small">
+                <el-radio-button label="cpu">CPU 节能</el-radio-button>
+                <el-radio-button label="gpu">GPU 加速</el-radio-button>
+              </el-radio-group>
+            </div>
             <div class="camera-actions">
               <button
                 type="button"
@@ -85,18 +112,53 @@
                 停止
               </button>
             </div>
-          </div>
-          <el-progress
-            v-if="videoProgress > 0 && videoProgress < 100"
-            :percentage="videoProgress"
-            :stroke-width="8"
-            class="video-progress"
-          />
+            <div v-if="cameraRunning" class="cam-status-tags">
+              <el-tag type="success" size="small">FPS: {{ cameraFps }}</el-tag>
+              <el-tag type="info" size="small">帧: {{ camFrameCount }}</el-tag>
+              <el-tag type="info" size="small">推理: {{ camInferenceTime }}ms</el-tag>
+            </div>
           </div>
         </div>
       </aside>
 
-      <section class="detection-main">
+      <section v-if="mode === 'camera'" class="detection-main camera-layout">
+        <div class="camera-preview-panel">
+          <div class="camera-video-wrapper">
+            <video ref="videoRef" autoplay playsinline muted style="display:none" />
+            <canvas ref="cameraCanvasRef" class="camera-canvas" />
+            <div v-if="!cameraRunning" class="camera-placeholder">点击左侧按钮开启摄像头</div>
+          </div>
+        </div>
+        <div class="camera-result-panel">
+          <div class="phro-module">
+            <h3 class="phro-module-title">
+              当前帧目标列表
+              <el-tag size="small" style="margin-left:8px">{{ camDetections.length }} 个目标</el-tag>
+            </h3>
+            <div v-if="camDetections.length === 0" class="cam-empty">暂无检测目标</div>
+            <div v-else class="cam-det-list">
+              <div v-for="(det, i) in camDetections" :key="i" class="cam-det-item">
+                <div class="cam-det-name">{{ det.class_name }}</div>
+                <el-progress :percentage="Math.round(det.confidence * 100)" :stroke-width="6" style="flex:1;margin:0 12px" />
+                <div class="cam-det-bbox">[{{ det.bbox.map(v => Math.round(v)).join(', ') }}]</div>
+              </div>
+            </div>
+          </div>
+          <div v-if="camSnapshots.length" class="phro-module">
+            <h3 class="phro-module-title">缺陷截图 ({{ camSnapshots.length }})</h3>
+            <div class="cam-snapshot-list">
+              <img
+                v-for="(s, i) in camSnapshots"
+                :key="i"
+                :src="'data:image/jpeg;base64,' + s"
+                class="cam-snapshot-img"
+              />
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section v-else class="detection-main">
         <div class="phro-module phro-module--grow preview-card">
           <h3 class="phro-module-title">检测结果预览</h3>
           <div class="phro-module-body">
@@ -120,17 +182,23 @@
       </section>
     </div>
 
-    <div v-if="batchResults.length" class="phro-module batch-card">
-      <h3 class="phro-module-title">批量结果概览</h3>
-      <div class="batch-grid">
+    <div v-if="batchResults.length && mode !== 'camera'" class="phro-module batch-card">
+      <h3 class="phro-module-title">
+        {{ mode === 'video' ? '视频关键帧' : '批量结果概览' }} ({{ batchResults.length }})
+        <span style="font-size:11px;color:#999;font-weight:normal;margin-left:6px">点击预览</span>
+      </h3>
+      <div class="batch-grid batch-grid-scroll">
         <div
           v-for="(item, idx) in batchResults"
           :key="idx"
           class="batch-item"
           @click="selectBatchItem(item)"
         >
-          <img :src="item.imageUrl" :alt="item.name" />
-          <span>{{ item.name }}</span>
+          <div class="batch-thumb">
+            <img v-if="item.imageUrl" :src="item.imageUrl" :alt="item.name" />
+            <div v-else class="batch-no-img">📋</div>
+          </div>
+          <span class="batch-name">{{ item.name }}</span>
           <span class="batch-count">{{ item.detections.length }} 个缺陷</span>
         </div>
       </div>
@@ -140,22 +208,16 @@
 
 <script setup>
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElTag, ElProgress } from 'element-plus'
 import PhroPageShell from '@/components/layout/PhroPageShell.vue'
 import ImageUploader from '@/components/detection/ImageUploader.vue'
 import BboxCanvas from '@/components/detection/BboxCanvas.vue'
 import DetectionParams from '@/components/detection/DetectionParams.vue'
 import DetectionResultPanel from '@/components/detection/DetectionResultPanel.vue'
 import { TASK_TYPES, PCB_SCENE } from '@/constants/pcbDefects'
-import {
-  mockDetectSingle,
-  mockDetectBatch,
-  mockDetectVideo,
-  mockGenerateFrameDetections,
-  mockGetScenes,
-  withApiFallback,
-} from '@/services/spridsMock'
-import { getScenesApi } from '@/api/detection'
+import { getScenesApi, detectSingleApi, detectBatchApi, detectZipApi, detectVideoApi, getVideoStatusApi } from '@/api/detection'
+import { createCameraWs } from '@/utils/cameraWs'
+import { createSingleTaskApi, createBatchTaskApi } from '@/api/tasks'
 
 const mode = ref('single')
 const loading = ref(false)
@@ -168,12 +230,6 @@ const resultSummary = ref(null)
 const batchResults = ref([])
 const videoProgress = ref(0)
 
-const videoRef = ref(null)
-const cameraCanvasRef = ref(null)
-const cameraRunning = ref(false)
-let cameraStream = null
-let cameraTimer = null
-
 const defaultClasses = PCB_SCENE.class_names
 
 function classCn(name) {
@@ -181,13 +237,11 @@ function classCn(name) {
 }
 
 async function loadScene() {
-  scene.value = await withApiFallback(
-    async () => {
-      const res = await getScenesApi()
-      return Array.isArray(res?.data) ? res.data[0] : res?.[0]
-    },
-    () => mockGetScenes().then((s) => s[0]),
-  )
+  try {
+    const res = await getScenesApi()
+    const data = Array.isArray(res?.data) ? res.data : (Array.isArray(res) ? res : [res])
+    if (data.length) scene.value = data[0]
+  } catch (e) { console.warn('Load scene failed, using default') }
 }
 
 function setResult(imageUrl, detections, inferenceTime = 0) {
@@ -204,11 +258,21 @@ async function handleSingle(file) {
   loading.value = true
   batchResults.value = []
   try {
-    const res = await mockDetectSingle(file, params.value)
-    setResult(res.imageUrl, res.results, res.task?.total_inference_time)
-    ElMessage.success(`检测完成，发现 ${res.results.length} 个缺陷`)
+    const fd = new FormData(); fd.append('file', file)
+    fd.append('conf', params.value.confThreshold)
+    fd.append('iou', params.value.iouThreshold)
+    const res = await detectSingleApi(fd)
+    const data = res.data || res
+    const defects = data.defects || data.results || []
+    const imgUrl = data.raw_image_base64
+      ? 'data:image/jpeg;base64,' + data.raw_image_base64
+      : (data.annotated_image_base64
+        ? 'data:image/jpeg;base64,' + data.annotated_image_base64
+        : URL.createObjectURL(file))
+    setResult(imgUrl, defects, data.inference_time || 0)
+    ElMessage.success(`检测完成，发现 ${defects.length} 个缺陷`)
   } catch (e) {
-    ElMessage.error(e.message || '检测失败')
+    ElMessage.error(e.response?.data?.detail || e.message || '检测失败')
   } finally {
     loading.value = false
   }
@@ -216,26 +280,43 @@ async function handleSingle(file) {
 
 async function handleBatch(files) {
   loading.value = true
+  batchResults.value = []
   try {
-    const res = await mockDetectBatch(files, params.value)
+    const isZip = files.length === 1 && files[0].name.endsWith('.zip')
+    let res
+    if (isZip) {
+      const fd = new FormData(); fd.append('file', files[0])
+      fd.append('conf', params.value.confThreshold)
+      res = await detectZipApi(fd)
+    } else {
+      const fd = new FormData()
+      files.forEach(f => fd.append('files', f))
+      fd.append('conf', params.value.confThreshold)
+      res = await detectBatchApi(fd)
+    }
+    const data = res.data || res
+    const results = data.results || []
     const grouped = {}
-    res.results.forEach((r) => {
-      if (!grouped[r.image_path]) {
-        grouped[r.image_path] = {
-          name: r.image_path,
-          imageUrl: r.annotated_image_url,
-          detections: [],
-        }
+    results.forEach((r, idx) => {
+      const path = r.image_path || ''
+      let basename = path.split('/').pop() || path.split('\\').pop() || `图片_${idx + 1}`
+      const key = basename
+      if (!grouped[key]) {
+        let imgUrl = ''
+        if (r.raw_image_base64) imgUrl = 'data:image/jpeg;base64,' + r.raw_image_base64
+        else if (r.annotated_image_base64) imgUrl = 'data:image/jpeg;base64,' + r.annotated_image_base64
+        else if (!isZip && files[idx]) imgUrl = URL.createObjectURL(files[idx])
+        let shortName = basename.replace(/\.rf\.[a-f0-9]+/, '')
+        grouped[key] = { name: shortName, imageUrl: imgUrl, detections: [] }
       }
-      grouped[r.image_path].detections.push(r)
+      grouped[key].detections.push(...(r.defects || [r]))
     })
     batchResults.value = Object.values(grouped)
-    if (batchResults.value.length) {
-      selectBatchItem(batchResults.value[0])
-    }
-    ElMessage.success(`批量检测完成，共 ${res.results.length} 个缺陷`)
+    if (batchResults.value.length) selectBatchItem(batchResults.value[0])
+    const totalDefs = batchResults.value.reduce((s, b) => s + (b.detections?.length || 0), 0)
+    ElMessage.success(`批量检测完成，共 ${totalDefs} 个缺陷`)
   } catch (e) {
-    ElMessage.error(e.message || '批量检测失败')
+    ElMessage.error(e.response?.data?.detail || e.message || '批量检测失败')
   } finally {
     loading.value = false
   }
@@ -250,90 +331,140 @@ async function handleVideo(file) {
   videoProgress.value = 0
   batchResults.value = []
   try {
-    const res = await mockDetectVideo(file, params.value, (p) => {
-      videoProgress.value = p
-    })
-    videoProgress.value = 100
-    currentDetections.value = res.results
-    previewImage.value = ''
-    resultSummary.value = {
-      totalObjects: res.results.length,
-      inferenceTime: res.task?.total_inference_time || 0,
+    const fd = new FormData(); fd.append('file', file)
+    fd.append('conf', params.value.confThreshold)
+    const taskRes = await detectVideoApi(fd)
+    const taskData = taskRes.data || taskRes
+    const taskId = taskData.task_id
+    if (!taskId) { ElMessage.error('视频上传失败'); loading.value = false; return }
+    ElMessage.info('视频处理中...')
+    let data = null
+    for (let i = 0; i < 120; i++) {
+      await new Promise(r => setTimeout(r, 2000))
+      videoProgress.value = Math.min(90, i * 2)
+      try {
+        const st = await getVideoStatusApi(taskId)
+        const sd = st.data || st
+        if (sd.status === 'COMPLETED' || sd.status === 'completed') {
+          data = sd.result || sd; break
+        } else if (sd.status === 'FAILED' || sd.status === 'failed') {
+          throw new Error(sd.message || '视频检测失败')
+        }
+      } catch(e) { if (e.message.includes('失败')) throw e }
     }
-    ElMessage.success(`视频检测完成：${file.name}`)
+    if (!data) { ElMessage.warning('视频超时'); loading.value = false; return }
+    videoProgress.value = 100
+    const frames = data.key_frames || []
+    let allDefects = []
+    frames.forEach(f => {
+      ;(f.detections || []).forEach(d => { d.frame_index = f.frame_index; d.timestamp = f.timestamp })
+      allDefects.push(...(f.detections || []))
+    })
+    if (!allDefects.length) allDefects = data.results || []
+    const kfImgs = frames.filter(f => f.annotated_image_base64)
+    if (kfImgs.length) previewImage.value = 'data:image/jpeg;base64,' + kfImgs[0].annotated_image_base64
+    batchResults.value = frames.map((kf, i) => ({
+      name: `帧 ${kf.frame_index} (${kf.timestamp}s)`,
+      imageUrl: kf.annotated_image_base64
+        ? 'data:image/jpeg;base64,' + kf.annotated_image_base64 : '',
+      detections: kf.detections || [],
+    }))
+    currentDetections.value = allDefects.slice(0, 50)
+    resultSummary.value = {
+      totalObjects: data.total_objects || allDefects.length,
+      inferenceTime: data.total_inference_time || 0,
+      processedFrames: data.processed_frames || frames.length,
+    }
+    ElMessage.success(`视频检测完成，${frames.length} 关键帧，${data.total_objects || allDefects.length} 个目标`)
   } catch (e) {
-    ElMessage.error(e.message || '视频检测失败')
+    ElMessage.error(e.response?.data?.detail || e.message || '视频检测失败')
   } finally {
     loading.value = false
     setTimeout(() => { videoProgress.value = 0 }, 1500)
   }
 }
 
-function drawCameraOverlay() {
-  const video = videoRef.value
-  const canvas = cameraCanvasRef.value
-  if (!video || !canvas || !cameraRunning.value) return
+const videoRef = ref(null)
+const cameraCanvasRef = ref(null)
+const cameraRunning = ref(false)
+const detectMode = ref('cpu')
+const cameraFps = ref(0)
+const camFrameCount = ref(0)
+const camInferenceTime = ref(0)
+const camObjectCount = ref(0)
+const camDetections = ref([])
+const camSnapshots = ref([])
+let cameraWs = null
+let mediaStream = null
 
-  const w = video.videoWidth || 640
-  const h = video.videoHeight || 480
-  canvas.width = w
-  canvas.height = h
-  const ctx = canvas.getContext('2d')
-  ctx.clearRect(0, 0, w, h)
-
-  const detections = mockGenerateFrameDetections(w, h, params.value)
-  currentDetections.value = detections.map((d, i) => ({
-    ...d,
-    id: i,
-    inference_time: 16,
-  }))
-  resultSummary.value = {
-    totalObjects: detections.length,
-    inferenceTime: 16,
-  }
-
-  detections.forEach((det) => {
-    const [x1, y1, x2, y2] = det.bbox
-    ctx.strokeStyle = det.color || '#e74c3c'
-    ctx.lineWidth = 2
-    ctx.strokeRect(x1, y1, x2 - x1, y2 - y1)
-    const label = `${det.class_name_cn} ${(det.confidence * 100).toFixed(0)}%`
-    ctx.fillStyle = det.color || '#e74c3c'
-    ctx.fillRect(x1, Math.max(0, y1 - 18), ctx.measureText(label).width + 8, 18)
-    ctx.fillStyle = '#fff'
-    ctx.font = '12px sans-serif'
-    ctx.fillText(label, x1 + 4, Math.max(12, y1 - 5))
-  })
+function sendCameraFrame() {
+  if (!cameraWs || !cameraWs.isConnected || !videoRef.value || videoRef.value.readyState < 2) return
+  const c = document.createElement('canvas')
+  c.width = 416; c.height = 416
+  const ctx = c.getContext('2d')
+  const vw = videoRef.value.videoWidth || 640; const vh = videoRef.value.videoHeight || 480
+  const s = Math.min(416 / vw, 416 / vh)
+  ctx.drawImage(videoRef.value, (416 - vw * s) / 2, (416 - vh * s) / 2, vw * s, vh * s)
+  cameraWs.sendFrame(c.toDataURL('image/jpeg', 0.6).split(',')[1])
 }
 
 async function startCamera() {
   try {
-    cameraStream = await navigator.mediaDevices.getUserMedia({ video: true })
-    videoRef.value.srcObject = cameraStream
+    mediaStream = await navigator.mediaDevices.getUserMedia({ video: { width: { ideal: 640 }, height: { ideal: 480 }, facingMode: 'user' }, audio: false })
+    videoRef.value.srcObject = mediaStream
+    await videoRef.value.play()
     cameraRunning.value = true
-    previewImage.value = ''
-    cameraTimer = setInterval(drawCameraOverlay, 500)
+    cameraWs = createCameraWs({
+      mode: detectMode.value, conf: params.value.confThreshold, iou: params.value.iouThreshold,
+      onResult: (d) => {
+        const img = new Image()
+        img.onload = () => {
+          const canvas = cameraCanvasRef.value
+          if (!canvas) return
+          canvas.width = img.width; canvas.height = img.height
+          canvas.getContext('2d').drawImage(img, 0, 0)
+          requestAnimationFrame(sendCameraFrame)
+        }
+        img.src = 'data:image/jpeg;base64,' + d.annotatedFrame
+        cameraFps.value = d.fps
+        camFrameCount.value = d.frameCount
+        camInferenceTime.value = d.inferenceTime
+        camObjectCount.value = d.objectCount
+        camDetections.value = d.detections || []
+        if (d.objectCount > 0 && camSnapshots.value.length < 10) {
+          camSnapshots.value.push(d.annotatedFrame)
+        }
+      },
+      onConfigOk: () => { requestAnimationFrame(sendCameraFrame) },
+      onError: (m) => { ElMessage.error(m) },
+      onClose: () => {},
+    })
+    cameraWs.connect()
     ElMessage.success('摄像头已开启')
-  } catch {
-    ElMessage.error('无法访问摄像头，请检查权限')
+  } catch (e) {
+    ElMessage.error('摄像头失败: ' + (e.message || '请检查权限'))
+    stopCamera()
   }
 }
 
 function stopCamera() {
+  if (cameraWs) { cameraWs.close(); cameraWs = null }
+  if (mediaStream) { mediaStream.getTracks().forEach(t => t.stop()); mediaStream = null }
   cameraRunning.value = false
-  if (cameraTimer) {
-    clearInterval(cameraTimer)
-    cameraTimer = null
+  cameraFps.value = 0
+  camFrameCount.value = 0
+  camInferenceTime.value = 0
+  camObjectCount.value = 0
+  camDetections.value = []
+  camSnapshots.value = []
+  if (cameraCanvasRef.value) {
+    const ctx = cameraCanvasRef.value.getContext('2d')
+    ctx.clearRect(0, 0, cameraCanvasRef.value.width, cameraCanvasRef.value.height)
   }
-  cameraStream?.getTracks().forEach((t) => t.stop())
-  cameraStream = null
-  if (videoRef.value) videoRef.value.srcObject = null
-  const canvas = cameraCanvasRef.value
-  canvas?.getContext('2d')?.clearRect(0, 0, canvas.width, canvas.height)
 }
 
 onMounted(loadScene)
-onBeforeUnmount(stopCamera)
+onBeforeUnmount(() => { stopCamera() })
 </script>
 
 <style lang="scss" scoped>
@@ -349,6 +480,8 @@ onBeforeUnmount(stopCamera)
 
 .detection-side {
   min-height: 0;
+  display: flex;
+  flex-direction: column;
 }
 
 .detection-main {
@@ -381,31 +514,205 @@ onBeforeUnmount(stopCamera)
   gap: 6px;
 }
 
-.camera-panel {
-  position: relative;
+.camera-ctrl-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.camera-stats-box {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.cam-stat {
+  text-align: center;
+  padding: 8px 4px;
+  background: rgba($phro-gold, 0.08);
   border-radius: $phro-radius-sm;
-  overflow: hidden;
-  background: #000;
 }
 
-.camera-video,
-.camera-overlay {
-  width: 100%;
+.cam-stat-val {
   display: block;
+  font-size: 20px;
+  font-weight: 700;
+  color: $phro-gold;
 }
 
-.camera-overlay {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  pointer-events: none;
+.cam-stat-lbl {
+  display: block;
+  font-size: 10px;
+  color: $phro-text-mid;
+  margin-top: 2px;
+}
+
+.cam-mode-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+
+  :deep(.el-radio-button__inner) {
+    background: transparent;
+    border-color: rgba($phro-gold, 0.3);
+    color: $phro-text-mid;
+  }
+
+  :deep(.el-radio-button.is-active .el-radio-button__inner) {
+    background: rgba($phro-gold, 0.2);
+    border-color: $phro-gold;
+    color: $phro-gold;
+    box-shadow: none;
+  }
+
+  :deep(.el-radio-button:hover:not(.is-disabled) .el-radio-button__inner) {
+    color: $phro-gold;
+    border-color: rgba($phro-gold, 0.5);
+  }
+}
+
+.cam-mode-label {
+  font-size: 12px;
+  color: $phro-text-mid;
+  white-space: nowrap;
 }
 
 .camera-actions {
   display: flex;
   gap: 8px;
-  margin-top: 10px;
+}
+
+.cam-status-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.camera-layout {
+  display: flex !important;
+  gap: $phro-module-gap;
+  grid-template-rows: none !important;
+}
+
+.camera-preview-panel {
+  flex: 3;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.camera-video-wrapper {
+  position: relative;
+  flex: 1;
+  background: #000;
+  border-radius: $phro-radius-sm;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 400px;
+}
+
+.camera-canvas {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+
+.camera-placeholder {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #999;
+  font-size: 16px;
+}
+
+.camera-result-panel {
+  flex: 2;
+  display: flex;
+  flex-direction: column;
+  gap: $phro-module-gap;
+  overflow-y: auto;
+}
+
+.cam-empty {
+  text-align: center;
+  color: $phro-text-mid;
+  padding: 20px;
+  font-size: 13px;
+}
+
+.camera-result-panel {
+  :deep(.el-tag) {
+    background: rgba($phro-gold, 0.12);
+    border-color: rgba($phro-gold, 0.25);
+    color: $phro-gold;
+  }
+
+  :deep(.el-tag--success) {
+    background: rgba($phro-gold, 0.15);
+    border-color: rgba($phro-gold, 0.3);
+    color: $phro-gold;
+  }
+
+  :deep(.el-tag--info) {
+    background: rgba($phro-text-mid, 0.1);
+    border-color: rgba($phro-text-mid, 0.2);
+    color: $phro-text-mid;
+  }
+}
+
+.cam-status-tags {
+  :deep(.el-tag) {
+    background: rgba($phro-gold, 0.12);
+    border-color: rgba($phro-gold, 0.25);
+    color: $phro-gold;
+  }
+}
+
+.cam-det-list {
+  max-height: 280px;
+  overflow-y: auto;
+}
+
+.cam-det-item {
+  display: flex;
+  align-items: center;
+  padding: 6px 0;
+  border-bottom: 1px solid rgba($phro-rose, 0.08);
+}
+
+.cam-det-item:last-child {
+  border-bottom: none;
+}
+
+.cam-det-name {
+  font-weight: 600;
+  min-width: 90px;
+  font-size: 12px;
+  color: $phro-text-deep;
+}
+
+.cam-det-bbox {
+  font-size: 11px;
+  color: $phro-text-mid;
+  font-family: monospace;
+  white-space: nowrap;
+}
+
+.cam-snapshot-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.cam-snapshot-img {
+  width: 100%;
+  border-radius: $phro-radius-sm;
+  border: 1px solid rgba($phro-gold, 0.2);
 }
 
 .video-progress {
@@ -418,6 +725,12 @@ onBeforeUnmount(stopCamera)
   gap: 12px;
 }
 
+.batch-grid-scroll {
+  max-height: 300px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
 .batch-item {
   @include phro.phro-module-box;
   padding: 8px;
@@ -427,16 +740,38 @@ onBeforeUnmount(stopCamera)
   color: $phro-text-deep;
   transition: border-color 0.2s;
 
-  &:hover {
-    border-color: rgba($phro-gold, 0.55);
+  .batch-thumb {
+    width: 100%;
+    height: 100px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    border-radius: 4px;
+    margin-bottom: 4px;
+    background: var(--phro-panel-bg, #f5f5f5);
+
+    img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
   }
 
-  img {
-    width: 100%;
-    height: 80px;
-    object-fit: cover;
-    border-radius: 4px;
-    margin-bottom: 6px;
+  .batch-no-img {
+    font-size: 32px;
+    opacity: 0.3;
+  }
+
+  .batch-name {
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  &:hover {
+    border-color: rgba($phro-gold, 0.55);
   }
 
   .batch-count {
@@ -449,6 +784,10 @@ onBeforeUnmount(stopCamera)
 @media (max-width: 960px) {
   .detection-layout {
     grid-template-columns: 1fr;
+  }
+
+  .camera-layout {
+    flex-direction: column !important;
   }
 }
 </style>

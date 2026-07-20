@@ -3,7 +3,7 @@
 
 接口列表：
   - POST /api/chat/upload    上传图片文件，返回服务端路径
-  - POST /api/chat/stream    SSE 流式对话（检测模式）
+  - POST /api/chat/stream    SSE 流式对话（多 Agent 模式）
   - POST /api/chat/stream/phrolova    SSE 流式对话（弗洛洛风格）
   - POST /api/chat/sessions    创建新会话
   - GET  /api/chat/sessions    获取会话列表
@@ -22,9 +22,9 @@ from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
-from app.agent.detection_agent import detection_agent
-from app.api.auth import get_current_user
-from app.api.deps import get_chat_user
+from app.agent.multi_agent_orchestrator import multi_agent_orchestrator
+from app.api.deps import get_current_user, get_chat_user
+from app.api.utils import success_response
 from app.config.settings import settings
 from app.core.logger import get_logger
 from app.database.session import get_db
@@ -33,7 +33,6 @@ from app.entity.schemas import (
     ChatMessageRequest, ChatSessionResponse,
     ChatSessionCreate, ChatHistoryResponse,
 )
-from app.agent.core import AgentCore
 from app.services.chat_service import stream_chat
 from app.services.session_service import session_service
 
@@ -60,7 +59,7 @@ async def upload_image(
         f.write(content)
 
     logger.info("图片上传成功: %s → %s", file.filename, file_path)
-    return {"image_path": file_path}
+    return success_response(data={"image_path": file_path}, message="上传成功")
 
 
 @router.post("/stream")
@@ -68,7 +67,7 @@ async def chat_stream(
     request: Request,
     current_user=Depends(get_current_user),
 ):
-    """SSE 流式对话（检测模式）"""
+    """SSE 流式对话（多 Agent 模式）"""
     body = await request.json()
     message = body.get("message", "")
     image_path = body.get("image_path")
@@ -86,7 +85,7 @@ async def chat_stream(
 
     async def event_generator():
         try:
-            async for event in detection_agent.chat_stream(
+            async for event in multi_agent_orchestrator.chat_stream(
                 message=message,
                 image_path=image_path,
                 user_id=current_user.id if current_user else None,
@@ -165,7 +164,7 @@ async def chat_stream_phrolova(
     )
 
 
-@router.post("/sessions", response_model=ChatSessionResponse, status_code=201)
+@router.post("/sessions", status_code=201)
 async def create_session(
     request: ChatSessionCreate = ChatSessionCreate(),
     db: Session = Depends(get_db),
@@ -173,20 +172,20 @@ async def create_session(
 ):
     """创建新会话"""
     session = session_service.create_session(db=db, user_id=current_user.id, title=request.title)
-    return session
+    return success_response(data=ChatSessionResponse(**session.__dict__), message="会话创建成功")
 
 
-@router.get("/sessions", response_model=list[ChatSessionResponse])
+@router.get("/sessions")
 async def get_sessions(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     """获取会话列表"""
     sessions = session_service.get_session_list(db=db, user_id=current_user.id)
-    return sessions
+    return success_response(data=[ChatSessionResponse(**s.__dict__) for s in sessions])
 
 
-@router.get("/sessions/{session_id}/messages", response_model=ChatHistoryResponse)
+@router.get("/sessions/{session_id}/messages")
 async def get_messages(
     session_id: int,
     db: Session = Depends(get_db),
@@ -199,10 +198,10 @@ async def get_messages(
         raise HTTPException(status_code=404, detail=str(e))
     
     messages = session_service.get_message_history(db=db, session_id=session_id)
-    return {
-        "session": session,
+    return success_response(data={
+        "session": ChatSessionResponse(**session.__dict__),
         "messages": session_service.format_messages_response(messages),
-    }
+    })
 
 
 @router.delete("/sessions/{session_id}")
@@ -213,7 +212,7 @@ async def delete_session(
 ):
     """删除会话"""
     session_service.delete_session(db=db, session_id=session_id)
-    return {"code": 200, "message": "会话已删除"}
+    return success_response(message="会话已删除")
 
 
 @router.post("/message")
@@ -235,15 +234,20 @@ async def send_message(
     
     session_service.save_message(db=db, session_id=session_id, role="user", content=request.content)
     
-    agent = AgentCore(db, current_user.id)
-    response = agent.generate_response(session_id, request.content)
+    result = await multi_agent_orchestrator.route_and_execute(
+        message=request.content,
+        user_id=current_user.id,
+        session_id=str(session_id),
+    )
+    response = result.get("output", "")
     
     session_service.save_message(db=db, session_id=session_id, role="assistant", content=response)
     
-    return {
+    return success_response(data={
         "session_id": session_id,
         "content": response,
-    }
+        "route": result.get("route"),
+    })
 
 
 @router.get("/welcome")
@@ -252,5 +256,6 @@ async def get_welcome(
     current_user: User = Depends(get_current_user),
 ):
     """获取欢迎消息"""
-    agent = AgentCore(db, current_user.id)
-    return {"message": agent.get_welcome_message()}
+    return success_response(data={
+        "message": "欢迎使用 PCB 缺陷检测智能助手！我可以帮您完成以下任务：\n- 📷 执行 PCB 缺陷检测\n- 📊 查询检测统计和分析报告\n- 🔍 解答领域知识问题\n- 🤖 查询模型版本和训练状态"
+    })

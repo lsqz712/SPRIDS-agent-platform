@@ -250,7 +250,6 @@ watch(
 
 <style lang="scss" scoped>
 @use '@/assets/styles/phro-theme.scss' as phro;
-@use '@/assets/styles/phro-cursor.scss' as phro-cursor;
 
 .phro-avatar-crop-loading {
   position: absolute;
@@ -281,7 +280,7 @@ watch(
   margin: 0 auto;
   border-radius: $phro-radius;
   overflow: hidden;
-  @include phro-cursor.phro-cursor-grab;
+  cursor: grab;
   touch-action: none;
   user-select: none;
   @include phro.phro-module-box;

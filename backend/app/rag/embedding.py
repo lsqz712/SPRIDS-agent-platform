@@ -15,11 +15,13 @@ logger = get_logger(__name__)
 class EmbeddingClient:
     def __init__(self):
         self._client = None
+        self._model = None
         self._init_client()
 
     def _init_client(self):
         api_key = settings.effective_llm_api_key
         base_url = settings.effective_llm_base_url
+        
         if api_key:
             try:
                 from openai import OpenAI
@@ -27,22 +29,32 @@ class EmbeddingClient:
                     api_key=api_key,
                     base_url=base_url,
                 )
-                logger.info("Embedding client initialized with API key from %s", 
-                           "LLM" if settings.LLM_API_KEY else ("QWEN" if settings.QWEN_API_KEY else "OPENAI"))
+                
+                if settings.LLM_API_KEY:
+                    self._model = "text-embedding-3-small"
+                    provider = "LLM"
+                elif settings.DEEPSEEK_API_KEY:
+                    self._model = "BAAI/bge-large-zh-v1.5"
+                    provider = "DEEPSEEK"
+                elif settings.QWEN_API_KEY:
+                    self._model = "text-embedding-v3"
+                    provider = "QWEN"
+                else:
+                    self._model = "text-embedding-3-small"
+                    provider = "OPENAI"
+                
+                logger.info("Embedding client initialized with API key from %s, model: %s", provider, self._model)
             except ImportError:
                 logger.warning("OpenAI SDK not installed, will use mock embedding")
         else:
             logger.warning("LLM API key not configured, will use mock embedding")
 
     def embed(self, text: str) -> List[float]:
-        if self._client:
+        if self._client and self._model:
             try:
-                model = "text-embedding-3-small"
-                if settings.QWEN_API_KEY and not settings.LLM_API_KEY:
-                    model = "text-embedding-v3"
                 response = self._client.embeddings.create(
                     input=text,
-                    model=model,
+                    model=self._model,
                 )
                 return response.data[0].embedding
             except Exception as e:
