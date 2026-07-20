@@ -168,41 +168,64 @@ class InitService:
     def init_all(db: Session) -> dict:
         result = {}
 
-        # 一键修复：存量用户自动审批 + 分配 viewer 角色
-        from sqlalchemy import update
-        users_to_fix = db.query(User).filter(
-            (User.is_approved == False) | (User.is_approved == None)
-        ).all()
+        for step_name, step_fn in [
+            ("fix_existing_users", InitService._fix_existing_users),
+            ("permissions", InitService.init_permissions),
+            ("roles", InitService.init_roles),
+            ("role_permissions", InitService.init_role_permissions),
+            ("admin", InitService.init_default_admin),
+        ]:
+            try:
+                count = step_fn(db)
+                if isinstance(count, dict):
+                    result.update(count)
+                elif count:
+                    result[f"{step_name}_count"] = count
+            except Exception as e:
+                result[f"{step_name}_error"] = str(e)
+
+        return result
+
+    @staticmethod
+    def _fix_existing_users(db: Session) -> dict:
+        result = {}
+        # 确保 schema 存在（兼容未跑 alembic 的环境）
+        from sqlalchemy import text as sa_text
+        try:
+            db.execute(sa_text("ALTER TABLE users ADD COLUMN IF NOT EXISTS is_approved BOOLEAN DEFAULT true"))
+            db.execute(sa_text("""
+                CREATE TABLE IF NOT EXISTS role_applications (
+                    id SERIAL PRIMARY KEY, user_id INT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                    role_id INT NOT NULL REFERENCES roles(id) ON DELETE CASCADE,
+                    status VARCHAR(20) DEFAULT 'pending', approver_id INT REFERENCES users(id) ON DELETE SET NULL,
+                    approve_comment VARCHAR(500), applied_at TIMESTAMP DEFAULT NOW(), approved_at TIMESTAMP
+                )
+            """))
+            db.execute(sa_text("CREATE INDEX IF NOT EXISTS ix_ra_user_id ON role_applications(user_id)"))
+            db.execute(sa_text("CREATE INDEX IF NOT EXISTS ix_ra_role_id ON role_applications(role_id)"))
+            db.commit()
+        except Exception:
+            db.rollback()
+
+        # 存量用户：自动审批 + 分配 viewer
+        users_to_fix = db.query(User).filter(User.is_approved == False).all()
         for user in users_to_fix:
             user.is_approved = True
         if users_to_fix:
             db.commit()
-            result["existing_users_approved"] = len(users_to_fix)
+            result["approved"] = len(users_to_fix)
 
-        # 存量用户：没有角色的自动分配 viewer
         viewer_role = role_service.get_role_by_name(db, "viewer")
         if viewer_role:
-            unassigned = db.query(User).filter(
-                ~User.user_roles.any()
-            ).all()
-            for user in unassigned:
-                db.add(UserRole(user_id=user.id, role_id=viewer_role.id))
-            if unassigned:
+            from sqlalchemy import text
+            assigned = db.execute(text(
+                "INSERT INTO user_roles (user_id, role_id) "
+                "SELECT u.id, :role_id FROM users u "
+                "WHERE NOT EXISTS (SELECT 1 FROM user_roles ur WHERE ur.user_id = u.id)"
+            ), {"role_id": viewer_role.id}).rowcount
+            if assigned:
                 db.commit()
-                result["viewer_assigned"] = len(unassigned)
-
-        perm_count = InitService.init_permissions(db)
-        result["permissions_created"] = perm_count
-
-        role_count = InitService.init_roles(db)
-        result["roles_created"] = role_count
-
-        rp_count = InitService.init_role_permissions(db)
-        result["role_permissions_created"] = rp_count
-
-        admin_created = InitService.init_default_admin(db)
-        result["admin_created"] = admin_created
-
+                result["viewer_assigned"] = assigned
         return result
 
     @staticmethod
