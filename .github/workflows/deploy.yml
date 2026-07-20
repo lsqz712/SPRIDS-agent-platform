@@ -36,9 +36,15 @@ jobs:
           username: ${{ secrets.SERVER_USERNAME }}
           port: ${{ secrets.SERVER_PORT }}
           password: ${{ secrets.SERVER_PASSWORD }}
+          envs: ACR_USER,ACR_PWD,ACR_REG
           script: |
+            echo "$ACR_PWD" | docker login --username "$ACR_USER" --password-stdin "$ACR_REG"
             cd /opt/pcb-web-platform
             docker compose -f docker-compose.server.yml pull
             docker compose -f docker-compose.server.yml up -d
             docker image prune -f
+        env:
+          ACR_USER: ${{ secrets.ACR_USERNAME }}
+          ACR_PWD: ${{ secrets.ACR_PASSWORD }}
+          ACR_REG: ${{ secrets.ACR_REGISTRY }}
 

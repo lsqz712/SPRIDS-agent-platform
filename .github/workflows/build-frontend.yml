@@ -31,5 +31,5 @@ jobs:
           file: ./frontend/Dockerfile
           push: true
           tags: ghcr.io/lsqz712/pcb-frontend:latest
-          cache-from: type=registry,ref=ghcr.io/lsqz712/pcb-frontend:buildcache
-          cache-to: type=registry,ref=ghcr.io/lsqz712/pcb-frontend:buildcache,mode=max
+          #cache-from: type=registry,ref=ghcr.io/lsqz712/pcb-frontend:buildcache
+          #cache-to: type=registry,ref=ghcr.io/lsqz712/pcb-frontend:buildcache,mode=max

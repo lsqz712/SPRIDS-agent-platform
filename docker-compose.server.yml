@@ -1,4 +1,4 @@
-﻿version: "3.8"
+version: "3.8"
 
 services:
   # Vue前端 Nginx
@@ -13,17 +13,15 @@ services:
     networks:
       pcb-net:
 
-  # FastAPI 后端（含PyTorch YOLO推理）
+  # FastAPI 后端（含PyTorch YOLO推理）— 从阿里云ACR拉，国内快
   backend:
-    image: ghcr.io/lsqz712/pcb-backend:latest
+    image: crpi-se7uno3jhc6pgu1q.cn-beijing.personal.cr.aliyuncs.com/pcb-platform/pcb-backend:latest
     container_name: pcb-backend
     restart: unless-stopped
     env_file:
-      # 适配你真实环境文件路径
       - /opt/pcb-web-platform/.env
     volumes:
-      # 挂载标记文件 .pcb_platform
-      - /opt/pcb-web-platform/.pcb_platform:/app/.pcb_platform:ro
+      - /opt/pcb-web-platform/models:/app/models:ro
     depends_on:
       postgres:
         condition: service_started
