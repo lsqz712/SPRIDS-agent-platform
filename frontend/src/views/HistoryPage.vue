@@ -110,11 +110,6 @@ import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import PhroPageShell from '@/components/layout/PhroPageShell.vue'
 import { TASK_TYPES, TASK_STATUS_MAP } from '@/constants/pcbDefects'
-import {
-  mockGetHistory,
-  mockGetTaskDetail,
-  withApiFallback,
-} from '@/services/spridsMock'
 import { getHistoryRecordsApi, deleteRecordApi } from '@/api/history'
 import { getTaskDetailApi } from '@/api/detection'
 
@@ -158,14 +153,15 @@ async function loadRecords() {
     const params = {
       page: pagination.page,
       page_size: pagination.page_size,
-      ...filters,
     }
-    const res = await withApiFallback(
-      () => getHistoryRecordsApi(params).then((r) => r?.data || r),
-      () => mockGetHistory(params),
-    )
+    if (filters.keyword) params.keyword = filters.keyword
+    if (filters.task_type) params.task_type = filters.task_type
+    if (filters.status) params.status = filters.status
+    const res = await getHistoryRecordsApi(params)
     records.value = res.items || []
     pagination.total = res.total || 0
+  } catch (e) {
+    console.error('History load failed:', e)
   } finally {
     loading.value = false
   }
@@ -180,11 +176,13 @@ function resetFilters() {
 }
 
 async function openDetail(row) {
-  detail.value = await withApiFallback(
-    () => getTaskDetailApi(row.id).then((r) => r?.data || r),
-    () => mockGetTaskDetail(row.id),
-  )
-  drawerVisible.value = true
+  try {
+    const res = await getTaskDetailApi(row.id)
+    detail.value = res.data || res
+    drawerVisible.value = true
+  } catch (e) {
+    console.error('Detail load failed:', e)
+  }
 }
 
 async function handleDelete(row) {
