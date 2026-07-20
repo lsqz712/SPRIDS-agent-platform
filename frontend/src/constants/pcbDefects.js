@@ -6,30 +6,30 @@ export const PCB_SCENE = {
   display_name: 'PCB SMT 缺陷检测',
   category: 'industry',
   class_names: [
-    'short_circuit',
-    'open_circuit',
     'missing_hole',
-    'solder_defect',
-    'scratch',
-    'misalignment',
+    'mouse_bite',
+    'open_circuit',
+    'short',
+    'spur',
+    'spurious_copper',
   ],
   class_names_cn: {
-    short_circuit: '短路',
-    open_circuit: '开路',
     missing_hole: '缺孔',
-    solder_defect: '焊点缺陷',
-    scratch: '划痕',
-    misalignment: '错位',
+    mouse_bite: '鼠咬',
+    open_circuit: '开路',
+    short: '短路',
+    spur: '毛刺',
+    spurious_copper: '残铜',
   },
 }
 
 export const DEFECT_COLORS = {
-  short_circuit: '#e74c3c',
+  missing_hole: '#27ae60',
+  mouse_bite: '#e74c3c',
   open_circuit: '#e67e22',
-  missing_hole: '#9b59b6',
-  solder_defect: '#3498db',
-  scratch: '#1abc9c',
-  misalignment: '#f1c40f',
+  short: '#f1c40f',
+  spur: '#9b59b6',
+  spurious_copper: '#3498db',
 }
 
 export const TASK_TYPES = [
