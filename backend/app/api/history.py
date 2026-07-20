@@ -26,8 +26,11 @@ async def get_history_records(
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
-    """获取历史检测记录列表（分页）"""
-    tasks, total = history_service.get_history_records(db=db, page=page, page_size=page_size)
+    """获取历史检测记录列表（分页 + 筛选）"""
+    tasks, total = history_service.get_history_records(
+        db=db, page=page, page_size=page_size,
+        keyword=keyword, task_type=task_type, status=status,
+    )
     return {
         "total": total,
         "page": page,
