@@ -35,7 +35,10 @@ class HistoryService:
                 )
 
         if task_type:
-            query = query.filter(DetectionTask.task_type == task_type)
+            if task_type == "batch":
+                query = query.filter(DetectionTask.task_type.in_(["batch", "zip"]))
+            else:
+                query = query.filter(DetectionTask.task_type == task_type)
 
         if status:
             try:
