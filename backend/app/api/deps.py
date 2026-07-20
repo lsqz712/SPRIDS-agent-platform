@@ -45,6 +45,8 @@ async def get_current_user(
     user = user_service.get_user_by_id(db, user_id)
     if user is None:
         raise credentials_exception
+    if not getattr(user, 'is_approved', True) and not user.is_superuser:
+        raise HTTPException(status_code=403, detail="账户尚未通过审批，请联系管理员")
     return user
 
 

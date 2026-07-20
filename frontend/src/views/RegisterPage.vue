@@ -49,6 +49,16 @@
         </div>
 
         <div class="register-field register-module">
+          <el-form-item prop="role">
+            <el-select v-model="registerForm.role" placeholder="选择角色" style="width:100%">
+              <el-option label="质检操作员 (operator)" value="operator" />
+              <el-option label="数据工程师 (engineer)" value="engineer" />
+              <el-option label="普通访客 (viewer)" value="viewer" />
+            </el-select>
+          </el-form-item>
+        </div>
+
+        <div class="register-field register-module">
           <el-form-item prop="confirmPassword">
             <el-input
               v-model="registerForm.confirmPassword"
@@ -95,6 +105,7 @@ const registerForm = reactive({
   email: '',
   password: '',
   confirmPassword: '',
+  role: 'viewer',
 })
 
 const validateConfirmPassword = (rule, value, callback) => {
@@ -134,6 +145,7 @@ async function handleRegister() {
       username: registerForm.username,
       email: registerForm.email,
       password: registerForm.password,
+      role: registerForm.role,
     })
     ElMessage.success('注册成功，请登录')
     router.push('/login')

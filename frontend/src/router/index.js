@@ -74,6 +74,12 @@ const routes = [
         meta: { title: '缺陷类型', icon: 'Tags' },
       },
       {
+        path: 'role-approvals',
+        name: 'RoleApprovals',
+        component: () => import('@/views/RoleApprovalsPage.vue'),
+        meta: { title: '角色审批', icon: 'Checked' },
+      },
+      {
         path: 'profile',
         name: 'Profile',
         component: () => import('@/views/ProfilePage.vue'),

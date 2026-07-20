@@ -21,7 +21,7 @@ AVATAR_ALLOWED_TYPES = {
 
 class UserService:
     @staticmethod
-    def register(db: Session, username: str, email: str, password: str) -> User:
+    def register(db: Session, username: str, email: str, password: str, role: str = "viewer") -> User:
         if db.query(User).filter(User.username == username).first():
             raise HTTPException(status_code=400, detail="用户名已存在")
         if db.query(User).filter(User.email == email).first():
@@ -31,8 +31,18 @@ class UserService:
             username=username,
             email=email,
             hashed_password=hash_password(password),
+            is_approved=False,  # 默认未审批
         )
         db.add(new_user)
+        db.flush()
+
+        # 创建角色申请
+        from app.entity.db_models import Role, RoleApplication
+        role_obj = db.query(Role).filter(Role.name == role).first()
+        if role_obj and role != "admin":
+            app = RoleApplication(user_id=new_user.id, role_id=role_obj.id, status="pending")
+            db.add(app)
+
         db.commit()
         db.refresh(new_user)
         return new_user

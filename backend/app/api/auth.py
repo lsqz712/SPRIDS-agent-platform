@@ -49,6 +49,7 @@ async def register(request: UserRegister, db: Session = Depends(get_db)):
         username=request.username,
         email=request.email,
         password=request.password,
+        role=request.role,
     )
     return success_response(data={
         "id": user.id,
