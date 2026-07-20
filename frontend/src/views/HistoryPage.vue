@@ -14,6 +14,7 @@
         />
         <el-select v-model="filters.task_type" placeholder="检测类型" clearable style="width: 130px">
           <el-option v-for="t in TASK_TYPES" :key="t.key" :label="t.label" :value="t.key" />
+          <el-option label="ZIP 检测" value="zip" />
         </el-select>
         <el-select v-model="filters.status" placeholder="状态" clearable style="width: 120px">
           <el-option label="已完成" value="completed" />
@@ -131,7 +132,8 @@ const pagination = reactive({
 })
 
 function typeLabel(type) {
-  return TASK_TYPES.find((t) => t.key === type)?.label || type
+  const m = { single: '单图检测', batch: '批量检测', zip: 'ZIP 检测', video: '视频检测', camera: '摄像头' }
+  return m[type] || type
 }
 
 function statusText(status) {
