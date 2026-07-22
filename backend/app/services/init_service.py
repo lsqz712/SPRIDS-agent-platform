@@ -212,6 +212,8 @@ class InitService:
             db.execute(sa_text("ALTER TABLE detection_tasks ADD COLUMN IF NOT EXISTS analyzed_at TIMESTAMP"))
             db.execute(sa_text("ALTER TABLE detection_tasks ADD COLUMN IF NOT EXISTS batch_id INTEGER"))
             db.execute(sa_text("ALTER TABLE defect_types ADD COLUMN IF NOT EXISTS name_cn VARCHAR(100)"))
+            db.execute(sa_text("ALTER TABLE defect_types ADD COLUMN IF NOT EXISTS severity VARCHAR(20) DEFAULT 'major'"))
+            db.execute(sa_text("ALTER TABLE defect_types ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT true"))
             db.commit()
         except Exception:
             db.rollback()
