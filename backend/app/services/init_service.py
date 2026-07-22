@@ -189,6 +189,16 @@ class InitService:
     @staticmethod
     def _fix_existing_users(db: Session) -> dict:
         result = {}
+        # 修复：已审批但 is_approved 未同步的用户
+        from sqlalchemy import text as sa_text
+        from app.entity.db_models import RoleApplication as RA
+        approved = db.execute(
+            sa_text("UPDATE users SET is_approved=true WHERE id IN (SELECT user_id FROM role_applications WHERE status='approved') AND (is_approved IS NULL OR is_approved=false)")
+        ).rowcount
+        if approved:
+            db.commit()
+            result["sync_approved"] = approved
+
         # 确保 schema 存在（兼容未跑 alembic 的环境）
         from sqlalchemy import text as sa_text
         try:

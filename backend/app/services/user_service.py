@@ -194,6 +194,8 @@ class UserService:
             ).first()
             if not existing:
                 db.add(UserRole(user_id=app.user_id, role_id=app.role_id))
+            # 审批通过 → 激活账户
+            app.user.is_approved = True
         db.commit()
         db.refresh(app)
         return app
