@@ -268,6 +268,7 @@
 
             <div v-else class="msg-outgoing">
               <div class="msg-body">
+                <img v-if="msg.imagePreview" :src="msg.imagePreview" class="msg-attach-preview" />
                 <div class="msg-bubble outgoing">
                   <div class="msg-text">{{ msg.content }}</div>
                 </div>
@@ -368,10 +369,12 @@ const windowsStore = useFeixunWindowsStore()
 const userStore = useUserStore()
 
 const pendingFilePath = ref('')
+const pendingFilePreview = ref('')
 
 async function handleFileAttach(event) {
   const file = event.target.files?.[0]
   if (!file) return
+  pendingFilePreview.value = URL.createObjectURL(file)
   try {
     const fd = new FormData()
     fd.append('file', file)
@@ -380,6 +383,7 @@ async function handleFileAttach(event) {
     pendingFilePath.value = data.image_path
     ElMessage.success(`已附加: ${file.name}`)
   } catch (e) {
+    pendingFilePreview.value = ''
     ElMessage.error('上传失败: ' + (e.response?.data?.detail || e.message))
   }
   event.target.value = ''
@@ -1558,13 +1562,15 @@ function handleSend() {
   if (!chat) return
 
   const imagePath = pendingFilePath.value
+  const imagePreview = pendingFilePreview.value
   pendingFilePath.value = ''
+  pendingFilePreview.value = ''
   inputText.value = ''
   nextTick(autoResize)
 
   stickToBottom.value = true
   dismissScrollToBottomBtn()
-  chat.messages.push({ role: 'user', content: text + (imagePath ? ' [图片]' : '') })
+  chat.messages.push({ role: 'user', content: text, imagePreview })
   touchSessionAfterUserSend()
   chat.messages.push({ role: 'assistant', content: '' })
   chat.isLoading = true
