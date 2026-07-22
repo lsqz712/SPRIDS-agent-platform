@@ -75,6 +75,7 @@ logs/
 
 # ── 数据文件 ────────────────────────────────────────
 backend/datasets/
+datasets/
 *.csv
 *.xlsx
 *.parquet

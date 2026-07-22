@@ -9,6 +9,17 @@
         <el-form label-position="top" class="training-form">
           <div class="phro-form-grid">
             <div class="phro-field">
+              <label>检测场景</label>
+              <el-select v-model="form.scene_id" style="width: 100%">
+                <el-option
+                  v-for="scene in scenes"
+                  :key="scene.id"
+                  :label="scene.display_name"
+                  :value="scene.id"
+                />
+              </el-select>
+            </div>
+            <div class="phro-field">
               <label>基础模型</label>
               <el-select v-model="form.model_name" style="width: 100%">
                 <el-option label="YOLOv11n（轻量）" value="yolov11n" />
@@ -48,10 +59,10 @@
           <button
             type="button"
             class="phro-btn phro-btn--primary start-btn"
-            :disabled="!!activeTask && activeTask.status === 'running'"
+            :disabled="!!activeTask && activeTask.status === 'processing'"
             @click="startTraining"
           >
-            {{ activeTask?.status === 'running' ? '训练进行中…' : '启动训练' }}
+            {{ activeTask?.status === 'processing' ? '训练进行中…' : '启动训练' }}
           </button>
         </el-form>
       </div>
@@ -138,8 +149,11 @@ import {
   withApiFallback,
 } from '@/services/spridsMock'
 import { createTrainingApi, listTrainingApi, getTrainingMetricsApi, getTrainingStatusApi } from '@/api/training'
+import { getScenesApi } from '@/api/detection'
 
+const scenes = ref([])
 const form = ref({
+  scene_id: null,
   model_name: 'yolov11n',
   epochs: 50,
   img_size: 640,
@@ -182,7 +196,7 @@ async function loadTasks() {
 async function startTraining() {
   try {
     const task = await withApiFallback(
-      () => createTrainingApi({ scene_id: 1, ...form.value }).then((r) => r?.data || r),
+      () => createTrainingApi({ ...form.value }).then((r) => r?.data || r),
       () => mockCreateTraining(form.value),
     )
     activeTask.value = task
@@ -222,7 +236,7 @@ function startPolling(taskId) {
     } catch {
       stopPolling()
     }
-  }, 1200)
+  }, 3000)
 }
 
 function stopPolling() {
@@ -238,11 +252,27 @@ async function viewTask(row) {
     () => getTrainingMetricsApi(row.id).then((r) => r?.data || r || []),
     () => mockGetTrainingMetrics(row.id),
   )
-  if (row.status === 'running') startPolling(row.id)
+  if (row.status === 'processing') startPolling(row.id)
   else stopPolling()
 }
 
-onMounted(loadTasks)
+async function loadScenes() {
+  try {
+    const res = await getScenesApi()
+    const list = res?.data || res || []
+    scenes.value = Array.isArray(list) ? list : []
+    if (scenes.value.length > 0 && !form.value.scene_id) {
+      form.value.scene_id = scenes.value[0].id
+    }
+  } catch {
+    scenes.value = []
+  }
+}
+
+onMounted(async () => {
+  await loadScenes()
+  loadTasks()
+})
 onBeforeUnmount(stopPolling)
 </script>
 
