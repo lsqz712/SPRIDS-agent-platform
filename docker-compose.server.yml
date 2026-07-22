@@ -9,7 +9,8 @@ services:
     ports:
       - "80:80"
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
     networks:
       pcb-net:
     healthcheck:
@@ -18,7 +19,7 @@ services:
       timeout: 10s
       retries: 3
 
-  # FastAPI 后端（含PyTorch YOLO推理）— 从阿里云ACR拉，国内快
+  # FastAPI 后端（含PyTorch YOLO推理）
   backend:
     image: crpi-se7uno3jhc6pgu1q.cn-beijing.personal.cr.aliyuncs.com/pcb-platform/pcb-backend:latest
     container_name: pcb-backend
@@ -26,7 +27,6 @@ services:
     env_file:
       - /opt/pcb-web-platform/.env
     environment:
-      # Docker网络中使用服务名访问
       DB_HOST: postgres
       REDIS_HOST: redis
       MINIO_ENDPOINT: minio:9000
@@ -44,8 +44,9 @@ services:
     healthcheck:
       test: ["CMD-SHELL", "curl -f http://localhost:8000/api/health || exit 1"]
       interval: 30s
-      timeout: 10s
-      retries: 3
+      timeout: 30s
+      retries: 20
+      start_period: 120s
 
   # PostgreSQL 数据库
   postgres:

@@ -69,13 +69,23 @@
           </div>
           <div class="batch-footer">
             <span class="batch-time">{{ formatDate(batch.created_at) }}</span>
-            <button
-              type="button"
-              class="phro-btn phro-btn--small"
-              @click.stop="deleteBatch(batch.id)"
-            >
-              删除
-            </button>
+            <div class="batch-actions">
+              <button
+                type="button"
+                class="phro-btn phro-btn--small"
+                @click.stop="detectBatch(batch.id)"
+                :disabled="batch.status === 'in_progress'"
+              >
+                一键检测
+              </button>
+              <button
+                type="button"
+                class="phro-btn phro-btn--small phro-btn--secondary"
+                @click.stop="deleteBatch(batch.id)"
+              >
+                删除
+              </button>
+            </div>
           </div>
         </div>
 
@@ -98,7 +108,7 @@
       </div>
     </div>
 
-    <el-dialog v-model="showCreateForm" title="创建批次" width="500px">
+    <el-dialog v-model="showCreateForm" title="创建批次" width="600px">
       <el-form :model="createForm" label-width="100px">
         <el-form-item label="批次号">
           <el-input v-model="createForm.batch_no" placeholder="如 BATCH-20250701-001" />
@@ -110,11 +120,32 @@
           <el-input v-model="createForm.production_line" placeholder="如 LINE-A01" />
         </el-form-item>
         <el-form-item label="总数量">
-          <el-input-number v-model="createForm.total_count" :min="1" />
+          <el-input-number v-model="createForm.total_count" :min="0" placeholder="不传则根据图片数量自动计算" />
+          <span v-if="uploadedFiles.length > 0" class="ml-2 text-sm text-green-500">
+            已上传 {{ uploadedFiles.length }} 张图片
+          </span>
+        </el-form-item>
+        <el-form-item label="批次图片">
+          <el-upload
+            class="upload-demo"
+            :action="''"
+            :file-list="uploadedFiles"
+            :auto-upload="false"
+            :on-change="handleFileChange"
+            :on-remove="handleFileRemove"
+            multiple
+            accept="image/jpeg,image/png,image/jpg,image/bmp"
+            list-type="picture-card"
+          >
+            <el-icon><Plus /></el-icon>
+            <template #tip>
+              <div class="el-upload__tip">支持 JPG、PNG 格式，可上传多张图片</div>
+            </template>
+          </el-upload>
         </el-form-item>
       </el-form>
       <template #footer>
-        <button type="button" class="phro-btn phro-btn--secondary" @click="showCreateForm = false">
+        <button type="button" class="phro-btn phro-btn--secondary" @click="closeCreateForm">
           取消
         </button>
         <button type="button" class="phro-btn" @click="createBatch">
@@ -123,7 +154,7 @@
       </template>
     </el-dialog>
 
-    <el-dialog v-model="detailVisible" title="批次详情" width="600px">
+    <el-dialog v-model="detailVisible" title="批次详情" width="700px">
       <div v-if="selectedBatch" class="batch-detail">
         <div class="detail-section">
           <h3>基本信息</h3>
@@ -148,7 +179,17 @@
         </div>
 
         <div class="detail-section">
-          <h3>检测统计</h3>
+          <div class="section-header">
+            <h3>检测统计</h3>
+            <button
+              type="button"
+              class="phro-btn phro-btn--small"
+              @click="detectBatch(selectedBatch.id)"
+              :disabled="selectedBatch.status === 'in_progress'"
+            >
+              一键检测
+            </button>
+          </div>
           <div class="stats-grid">
             <div class="stat-card">
               <div class="stat-value">{{ selectedBatch.total_count }}</div>
@@ -174,6 +215,30 @@
         </div>
 
         <div class="detail-section">
+          <div class="section-header">
+            <h3>批次图片</h3>
+            <button type="button" class="phro-btn phro-btn--small" @click="showUploadDialog = true">
+              导入图片
+            </button>
+          </div>
+          <div v-if="batchImages.length > 0" class="images-grid">
+            <div v-for="img in batchImages" :key="img.id" class="image-item">
+              <el-image :src="img.image_url" fit="cover" class="preview-img" />
+              <div class="image-info">
+                <span class="image-name">{{ img.filename }}</span>
+                <el-tag :type="getImageStatusTagType(img.status)" size="small">
+                  {{ getImageStatusLabel(img.status) }}
+                </el-tag>
+              </div>
+            </div>
+          </div>
+          <div v-else class="empty-images">
+            <el-icon class="empty-icon"><ImageIcon /></el-icon>
+            <p>暂无图片，点击上方按钮导入</p>
+          </div>
+        </div>
+
+        <div class="detail-section">
           <h3>时间信息</h3>
           <div class="detail-row">
             <span class="detail-label">创建时间</span>
@@ -186,15 +251,50 @@
         </div>
       </div>
     </el-dialog>
+
+    <el-dialog v-model="showUploadDialog" title="导入图片" width="500px">
+      <el-upload
+        class="upload-demo"
+        :action="''"
+        :file-list="uploadFiles"
+        :auto-upload="false"
+        :on-change="handleUploadFileChange"
+        :on-remove="handleUploadFileRemove"
+        multiple
+        accept="image/jpeg,image/png,image/jpg,image/bmp"
+        list-type="picture-card"
+      >
+        <el-icon><Plus /></el-icon>
+        <template #tip>
+          <div class="el-upload__tip">支持 JPG、PNG 格式，可上传多张图片</div>
+        </template>
+      </el-upload>
+      <template #footer>
+        <button type="button" class="phro-btn phro-btn--secondary" @click="showUploadDialog = false">
+          取消
+        </button>
+        <button type="button" class="phro-btn" @click="uploadImages">
+          上传
+        </button>
+      </template>
+    </el-dialog>
   </PhroPageShell>
 </template>
 
 <script setup>
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Search, Box } from '@element-plus/icons-vue'
+import { Search, Box, Plus, Picture as ImageIcon } from '@element-plus/icons-vue'
 import PhroPageShell from '@/components/layout/PhroPageShell.vue'
-import { getBatchesApi, createBatchApi, getBatchDetailApi, deleteBatchApi } from '@/api/batches'
+import {
+  getBatchesApi,
+  createBatchWithImagesApi,
+  getBatchDetailApi,
+  deleteBatchApi,
+  uploadBatchImagesApi,
+  getBatchImagesApi,
+  detectBatchApi,
+} from '@/api/batches'
 
 const batchList = ref([])
 const total = ref(0)
@@ -204,13 +304,17 @@ const searchKeyword = ref('')
 const filterStatus = ref('')
 const showCreateForm = ref(false)
 const detailVisible = ref(false)
+const showUploadDialog = ref(false)
 const selectedBatch = ref(null)
+const batchImages = ref([])
+const uploadedFiles = ref([])
+const uploadFiles = ref([])
 
 const createForm = reactive({
   batch_no: '',
   pcb_type: '',
   production_line: '',
-  total_count: 1,
+  total_count: 0,
 })
 
 async function loadBatches() {
@@ -231,20 +335,48 @@ async function loadBatches() {
   }
 }
 
+function handleFileChange(file, fileList) {
+  uploadedFiles.value = fileList
+}
+
+function handleFileRemove(file, fileList) {
+  uploadedFiles.value = fileList
+}
+
+function handleUploadFileChange(file, fileList) {
+  uploadFiles.value = fileList
+}
+
+function handleUploadFileRemove(file, fileList) {
+  uploadFiles.value = fileList
+}
+
+function closeCreateForm() {
+  showCreateForm.value = false
+  createForm.batch_no = ''
+  createForm.pcb_type = ''
+  createForm.production_line = ''
+  createForm.total_count = 0
+  uploadedFiles.value = []
+}
+
 async function createBatch() {
   if (!createForm.batch_no || !createForm.pcb_type || !createForm.production_line) {
     ElMessage.warning('请填写完整信息')
     return
   }
+  const files = uploadedFiles.value.map(f => f.raw)
   try {
-    const res = await createBatchApi(createForm)
+    const res = await createBatchWithImagesApi({
+      batch_no: createForm.batch_no,
+      pcb_type: createForm.pcb_type,
+      production_line: createForm.production_line,
+      total_count: createForm.total_count,
+      files,
+    })
     if (res.code === 201) {
       ElMessage.success('批次创建成功')
-      showCreateForm.value = false
-      createForm.batch_no = ''
-      createForm.pcb_type = ''
-      createForm.production_line = ''
-      createForm.total_count = 1
+      closeCreateForm()
       loadBatches()
     }
   } catch (error) {
@@ -257,10 +389,53 @@ async function showBatchDetail(batch) {
     const res = await getBatchDetailApi(batch.id)
     if (res.code === 200) {
       selectedBatch.value = res.data
+      batchImages.value = res.data.images || []
       detailVisible.value = true
     }
   } catch (error) {
     ElMessage.error('加载批次详情失败')
+  }
+}
+
+async function uploadImages() {
+  if (!selectedBatch.value || uploadFiles.value.length === 0) {
+    ElMessage.warning('请选择要上传的图片')
+    return
+  }
+  const files = uploadFiles.value.map(f => f.raw)
+  try {
+    const res = await uploadBatchImagesApi(selectedBatch.value.id, files)
+    if (res.code === 200) {
+      ElMessage.success('图片上传成功')
+      showUploadDialog.value = false
+      uploadFiles.value = []
+      await showBatchDetail(selectedBatch.value)
+      loadBatches()
+    }
+  } catch (error) {
+    ElMessage.error('上传图片失败')
+  }
+}
+
+async function detectBatch(batchId) {
+  try {
+    await ElMessageBox.confirm('确定要对该批次进行检测吗？', '提示', {
+      confirmButtonText: '确定',
+      cancelButtonText: '取消',
+      type: 'warning',
+    })
+    const res = await detectBatchApi(batchId, { conf: 0.25 })
+    if (res.code === 200) {
+      ElMessage.success('批次检测任务已创建')
+      loadBatches()
+      if (detailVisible.value && selectedBatch.value && selectedBatch.value.id === batchId) {
+        await showBatchDetail(selectedBatch.value)
+      }
+    }
+  } catch (error) {
+    if (error !== 'cancel') {
+      ElMessage.error('检测失败')
+    }
   }
 }
 
@@ -297,6 +472,26 @@ function getBatchStatusLabel(status) {
     pending: '待检测',
     in_progress: '检测中',
     completed: '已完成',
+  }
+  return map[status] || status
+}
+
+function getImageStatusTagType(status) {
+  const map = {
+    pending: 'info',
+    detected: 'warning',
+    pass: 'success',
+    fail: 'danger',
+  }
+  return map[status] || 'info'
+}
+
+function getImageStatusLabel(status) {
+  const map = {
+    pending: '待检测',
+    detected: '已检测',
+    pass: '良品',
+    fail: '不良品',
   }
   return map[status] || status
 }
@@ -422,6 +617,11 @@ onMounted(loadBatches)
   color: $phro-text-mid;
 }
 
+.batch-actions {
+  display: flex;
+  gap: 8px;
+}
+
 .empty-state {
   grid-column: 1 / -1;
   display: flex;
@@ -462,6 +662,13 @@ onMounted(loadBatches)
     }
   }
 
+  .section-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 12px;
+  }
+
   .detail-row {
     display: flex;
     justify-content: space-between;
@@ -492,6 +699,51 @@ onMounted(loadBatches)
     &.pass-rate-card.warning .stat-value {
       color: $phro-rose;
     }
+  }
+
+  .images-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 12px;
+  }
+
+  .image-item {
+    position: relative;
+    border-radius: $phro-radius;
+    overflow: hidden;
+    border: $phro-divider-width solid $phro-border;
+
+    .preview-img {
+      width: 100%;
+      height: 100px;
+      object-fit: cover;
+    }
+
+    .image-info {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 6px 8px;
+      background: $phro-panel-bg;
+    }
+
+    .image-name {
+      font-size: 11px;
+      color: $phro-text-mid;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      max-width: 70%;
+    }
+  }
+
+  .empty-images {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 30px;
+    color: $phro-text-mid;
   }
 }
 </style>
