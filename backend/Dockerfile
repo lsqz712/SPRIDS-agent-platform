@@ -1,5 +1,7 @@
+ARG REGISTRY_PREFIX=docker.io/library/
+
 # 改为Debian12稳定版bookworm，不再是测试版trixie
-FROM python:3.11-slim-bookworm
+FROM ${REGISTRY_PREFIX}python:3.11-slim-bookworm
 
 # 时区配置
 ENV TZ=Asia/Shanghai

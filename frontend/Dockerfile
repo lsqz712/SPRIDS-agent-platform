@@ -1,7 +1,9 @@
+ARG REGISTRY_PREFIX=docker.io/library/
+
 # --------------------------
 # 前端多阶段构建：构建阶段 Node
 # --------------------------
-FROM node:20-alpine AS builder
+FROM ${REGISTRY_PREFIX}node:20-alpine AS builder
 
 WORKDIR /app
 
@@ -16,7 +18,7 @@ RUN npm run build
 # --------------------------
 # 运行阶段 Nginx Alpine
 # --------------------------
-FROM nginx:alpine
+FROM ${REGISTRY_PREFIX}nginx:alpine
 
 # 删除默认 nginx 配置
 RUN rm -rf /etc/nginx/conf.d/default.conf

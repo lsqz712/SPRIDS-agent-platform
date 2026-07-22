@@ -44,5 +44,9 @@ jobs:
           tags: |
             ghcr.io/lsqz712/pcb-backend:latest
             ${{ secrets.ACR_REGISTRY }}/pcb-platform/pcb-backend:latest
+          build-args: |
+            REGISTRY_PREFIX=registry.cn-hangzhou.aliyuncs.com/library/
           cache-from: type=registry,ref=ghcr.io/lsqz712/pcb-backend:buildcache
           cache-to: type=registry,ref=ghcr.io/lsqz712/pcb-backend:buildcache,mode=max
+          timeout: 300
+          retries: 3
