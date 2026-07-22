@@ -14,11 +14,12 @@ from app.config.settings import settings
 _model_cache: Dict[str, YOLO] = {}
 
 DEFAULT_CLASS_NAMES = {
-    0: {"name": "short", "name_cn": "短路"},
-    1: {"name": "open", "name_cn": "开路"},
-    2: {"name": "missing", "name_cn": "缺件"},
-    3: {"name": "offset", "name_cn": "偏移"},
-    4: {"name": "solder", "name_cn": "焊点不良"},
+    0: {"name": "missing_hole", "name_cn": "缺孔"},
+    1: {"name": "mouse_bite", "name_cn": "鼠咬"},
+    2: {"name": "open_circuit", "name_cn": "开路"},
+    3: {"name": "short", "name_cn": "短路"},
+    4: {"name": "spur", "name_cn": "毛刺"},
+    5: {"name": "spurious_copper", "name_cn": "残铜"},
 }
 
 def load_model(model_path: str) -> YOLO:
