@@ -232,8 +232,8 @@
           <el-table-column label="操作" width="140" v-if="userStore.isSuperuser">
             <template #default="{ row }">
               <template v-if="row.status==='pending'">
-                <el-button size="small" type="success" @click="handleApprove(row.id,'approved')">通过</el-button>
-                <el-button size="small" type="danger" @click="handleApprove(row.id,'rejected')">拒绝</el-button>
+                <el-button size="small" type="success" @click="handleApprove(row)">通过</el-button>
+                <el-button size="small" type="danger" @click="handleReject(row)">拒绝</el-button>
               </template>
               <span v-else>-</span>
             </template>
@@ -377,13 +377,6 @@ async function loadRoleApps() {
   } catch (e) { console.error('load apps failed:', e) }
 }
 
-async function handleApprove(applicationId, status) {
-  try {
-    await request.post(`/roles/applications/${applicationId}/approve`, { status, comment: status === 'approved' ? '审批通过' : '已拒绝' })
-    ElMessage.success(status === 'approved' ? '已通过' : '已拒绝')
-    loadRoleApps()
-  } catch (e) { ElMessage.error(e.response?.data?.detail || '操作失败') }
-}
 const uploadingAvatar = ref(false)
 const avatarInputRef = ref(null)
 const avatarCropVisible = ref(false)
