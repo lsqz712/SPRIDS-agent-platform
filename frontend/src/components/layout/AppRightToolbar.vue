@@ -17,10 +17,28 @@ import AppToolFlyoutPanel from './AppToolFlyoutPanel.vue'
 
 const toolMenu = useAppToolMenuStore()
 
+const OUTSIDE_CLOSE_IGNORE = '.app-tool-flyout, .app-sidebar-expand-toggle'
+
 function refreshAnchor() {
   if (toolMenu.activeSection) {
     toolMenu.updateAnchorRect()
   }
+}
+
+function handleDocumentPointerDown(event) {
+  if (!toolMenu.activeSection) return
+  const target = event.target
+  if (!(target instanceof Element)) return
+  if (target.closest(OUTSIDE_CLOSE_IGNORE)) return
+  toolMenu.close()
+}
+
+function bindOutsideClose() {
+  document.addEventListener('pointerdown', handleDocumentPointerDown, true)
+}
+
+function unbindOutsideClose() {
+  document.removeEventListener('pointerdown', handleDocumentPointerDown, true)
 }
 
 watch(
@@ -31,14 +49,17 @@ watch(
       toolMenu.updateAnchorRect()
       window.addEventListener('resize', refreshAnchor)
       window.addEventListener('scroll', refreshAnchor, true)
+      bindOutsideClose()
       return
     }
+    unbindOutsideClose()
     window.removeEventListener('resize', refreshAnchor)
     window.removeEventListener('scroll', refreshAnchor, true)
   },
 )
 
 onUnmounted(() => {
+  unbindOutsideClose()
   window.removeEventListener('resize', refreshAnchor)
   window.removeEventListener('scroll', refreshAnchor, true)
 })

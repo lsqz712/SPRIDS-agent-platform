@@ -66,3 +66,15 @@ body.feixun-drag-no-select * {
   -webkit-user-select: none !important;
   -moz-user-select: none !important;
 }
+
+// ── Logo 清晰渲染（避免浏览器缩小 1000px 大图时模糊）──
+.phro-logo {
+  display: block;
+  flex-shrink: 0;
+  object-fit: contain;
+  mix-blend-mode: lighten;
+  user-select: none;
+  -webkit-user-drag: none;
+  image-rendering: -webkit-optimize-contrast;
+  image-rendering: crisp-edges;
+}

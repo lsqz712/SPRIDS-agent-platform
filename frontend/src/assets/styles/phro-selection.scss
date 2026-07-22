@@ -1,39 +1,81 @@
 @use './variables.scss' as *;
 
+@mixin phro-selection-colors {
+  &::selection {
+    background: rgba($phro-gold, 0.42);
+    color: $phro-crimson;
+  }
+
+  &::-moz-selection {
+    background: rgba($phro-gold, 0.42);
+    color: $phro-crimson;
+  }
+}
+
+@mixin phro-text-selectable {
+  user-select: text;
+  -webkit-user-select: text;
+  -webkit-touch-callout: default;
+  @include phro-selection-colors;
+}
+
+// 可选中复制，但禁止选中后拖拽
+@mixin phro-text-no-drag {
+  @include phro-text-selectable;
+  -webkit-user-drag: none;
+}
+
+@mixin phro-no-selection {
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-user-drag: none;
+  -webkit-touch-callout: none;
+
+  &::selection {
+    background: transparent;
+    color: inherit;
+  }
+
+  &::-moz-selection {
+    background: transparent;
+    color: inherit;
+  }
+}
+
 .layout-body--feixun {
+  user-select: none;
+  -webkit-user-select: none;
+
   input,
   textarea,
   [contenteditable='true'],
+  .chat-input,
+  .history-title-input {
+    @include phro-text-selectable;
+  }
+
   .msg-bubble,
   .msg-body,
   .msg-text,
   .markdown-body,
-  .chat-input,
   .phro-table-wrap,
   .phro-table-wrap * {
-    &::selection {
-      background: rgba($phro-gold, 0.42);
-      color: $phro-crimson;
-    }
-
-    &::-moz-selection {
-      background: rgba($phro-gold, 0.42);
-      color: $phro-crimson;
-    }
-
-    -webkit-touch-callout: none;
+    @include phro-text-no-drag;
   }
 }
 
 .app-sidebar,
-.app-tool-flyout {
-  ::selection {
-    background: transparent;
-    color: inherit;
-  }
-
-  ::-moz-selection {
-    background: transparent;
-    color: inherit;
-  }
+.app-tool-flyout,
+.app-sidebar-title,
+.chat-empty,
+.chat-header,
+.chat-partner,
+.chat-quick-actions,
+.sidebar-partner,
+.contact-notice,
+.history-item,
+.history-title,
+.history-preview,
+.history-time {
+  @include phro-no-selection;
 }

@@ -56,5 +56,10 @@ export const useAppToolMenuStore = defineStore('appToolMenu', {
       if (!anchorElement || !this.activeSection) return
       this.setAnchor(this.activeSection, anchorElement)
     },
+
+    close() {
+      this.activeSection = null
+      anchorElement = null
+    },
   },
 })

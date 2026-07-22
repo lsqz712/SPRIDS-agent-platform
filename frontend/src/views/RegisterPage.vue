@@ -2,7 +2,15 @@
   <div class="register-page">
     <div class="register-card">
       <div class="register-header">
-        <img src="/logo.webp" alt="logo" class="register-logo" />
+        <img
+          src="/logo-52.webp"
+          srcset="/logo-52.webp 1x, /logo-104.webp 2x"
+          width="174"
+          height="52"
+          alt="logo"
+          class="register-logo phro-logo"
+          draggable="false"
+        />
         <h2>Phrolova Agent Platform</h2>
         <p>弗洛洛智能体平台</p>
       </div>
@@ -188,13 +196,9 @@ async function handleRegister() {
   margin-bottom: 28px;
 
   .register-logo {
+    width: 174px;
     height: 52px;
-    width: auto;
-    max-width: 220px;
     margin-bottom: 16px;
-    object-fit: contain;
-    mix-blend-mode: lighten;
-    filter: drop-shadow(0 2px 8px rgba(40, 6, 16, 0.4));
   }
 
   h2 {

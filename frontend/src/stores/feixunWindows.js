@@ -15,17 +15,6 @@ import { computeStickyFanStepPx } from '@/components/feixun/feixunWindowChrome'
 
 const LEGACY_SESSIONS_KEY = 'phrolova_chat_sessions'
 
-function getSessionsKey() {
-  try {
-    const raw = localStorage.getItem('rsod_user')
-    const user = raw ? JSON.parse(raw) : null
-    const uid = user?.id || 'anonymous'
-    return `phrolova_chat_sessions_${uid}`
-  } catch {
-    return LEGACY_SESSIONS_KEY
-  }
-}
-
 const STICKY_STACK_ORIGIN = { left: 24, top: 24 }
 const DEFAULT_STICKY_FAN_STEP = { x: 88, y: 0 }
 const STICKY_FALLBACK_SIZE = { width: 1200, height: 750 }
@@ -103,7 +92,7 @@ function generateWindowId() {
 
 function loadLegacySessions() {
   try {
-    const raw = localStorage.getItem(getSessionsKey())
+    const raw = localStorage.getItem(LEGACY_SESSIONS_KEY)
     const parsed = raw ? JSON.parse(raw) : []
     return Array.isArray(parsed)
       ? sortSessions(
@@ -119,7 +108,7 @@ function loadLegacySessions() {
 }
 
 function persistLegacySessions(sessions) {
-  localStorage.setItem(getSessionsKey(), JSON.stringify(sessions))
+  localStorage.setItem(LEGACY_SESSIONS_KEY, JSON.stringify(sessions))
 }
 
 export function createEmptyChat() {

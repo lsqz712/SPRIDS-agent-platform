@@ -1,7 +1,15 @@
 <template>
   <aside class="app-sidebar" :class="{ 'app-sidebar--feixun': feixunTheme }">
     <div class="app-sidebar-brand">
-      <img src="/logo.webp" alt="logo" class="app-sidebar-logo" />
+      <img
+        src="/logo-36.webp"
+        srcset="/logo-36.webp 1x, /logo-72.webp 2x"
+        width="120"
+        height="36"
+        alt="logo"
+        class="app-sidebar-logo phro-logo"
+        draggable="false"
+      />
       <span class="app-sidebar-title">Phrolova SPRIDS Agent Platform</span>
     </div>
 
@@ -186,10 +194,8 @@ async function toggleToolMenu(section) {
 }
 
 .app-sidebar-logo {
+  width: 120px;
   height: 36px;
-  width: auto;
-  max-width: 100%;
-  object-fit: contain;
 }
 
 .app-sidebar-title {
@@ -200,6 +206,8 @@ async function toggleToolMenu(section) {
   color: #f5e6c8;
   text-shadow: 0 1px 6px rgba(40, 6, 16, 0.55);
   word-break: break-word;
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 .app-sidebar-nav {
@@ -320,20 +328,31 @@ async function toggleToolMenu(section) {
 }
 
 .app-sidebar-user {
-  display: flex;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) 36px;
   align-items: center;
-  gap: 10px;
+  column-gap: 10px;
   width: 100%;
   box-sizing: border-box;
+  padding-right: 14px;
+
+  .app-sidebar-expand-toggle {
+    position: static;
+    grid-column: 3;
+    width: 36px;
+    height: 100%;
+    min-height: 32px;
+  }
 }
 
 .app-sidebar-user-avatar,
 .app-sidebar-user :deep(.phro-user-avatar) {
   flex-shrink: 0;
+  grid-column: 1;
 }
 
 .app-sidebar-username {
-  flex: 1;
+  grid-column: 2;
   min-width: 0;
   text-align: center;
   overflow: hidden;

@@ -115,6 +115,8 @@ function exitToLogin() {
 
     :deep(.msg-bubble),
     :deep(.msg-body),
+    :deep(.msg-text),
+    :deep(.markdown-body),
     :deep(.phro-table-wrap),
     :deep(.phro-table-wrap *) {
       user-select: text;

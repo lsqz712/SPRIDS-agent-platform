@@ -2,7 +2,15 @@
   <div class="login-page">
     <div class="login-card">
       <div class="login-header">
-        <img src="/logo.webp" alt="logo" class="login-logo" />
+        <img
+          src="/logo-52.webp"
+          srcset="/logo-52.webp 1x, /logo-104.webp 2x"
+          width="174"
+          height="52"
+          alt="logo"
+          class="login-logo phro-logo"
+          draggable="false"
+        />
         <h2>Phrolova Agent Platform</h2>
         <p>弗洛洛智能体平台</p>
       </div>
@@ -167,13 +175,9 @@ function enterDevPreview() {
   margin-bottom: 28px;
 
   .login-logo {
+    width: 174px;
     height: 52px;
-    width: auto;
-    max-width: 220px;
     margin-bottom: 16px;
-    object-fit: contain;
-    mix-blend-mode: lighten;
-    filter: drop-shadow(0 2px 8px rgba(40, 6, 16, 0.4));
   }
 
   h2 {

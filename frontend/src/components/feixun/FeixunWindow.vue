@@ -74,9 +74,12 @@
       />
       <div class="feixun-window-ear__logo-zone" aria-hidden="true">
         <img
-          :src="phrolova.elementIcon"
+          src="/logo-40.webp"
+          srcset="/logo-40.webp 1x, /logo-80.webp 2x"
+          width="134"
+          height="40"
           alt=""
-          class="feixun-window-ear__icon"
+          class="feixun-window-ear__icon phro-logo"
           draggable="false"
         />
       </div>
@@ -197,6 +200,7 @@
               ref="messageListRef"
               class="chat-messages"
               @scroll="handleMessageListScroll"
+              @dragstart.prevent
             >
           <div class="chat-watermark" />
 
@@ -268,7 +272,6 @@
 
             <div v-else class="msg-outgoing">
               <div class="msg-body">
-                <img v-if="msg.imagePreview" :src="msg.imagePreview" class="msg-attach-preview" />
                 <div class="msg-bubble outgoing">
                   <div class="msg-text">{{ msg.content }}</div>
                 </div>
@@ -292,8 +295,6 @@
           </div>
 
         <footer class="chat-input-bar">
-          <input ref="fileInputRef" type="file" accept="image/*" style="display:none" @change="handleFileAttach" />
-          <button type="button" class="phro-btn attach-btn" :disabled="isLoading" @click="$refs.fileInputRef.click()" title="附加图片">📎</button>
           <textarea
             ref="inputRef"
             v-model="inputText"
@@ -367,27 +368,6 @@ const emit = defineEmits(['focus', 'dragging-change'])
 
 const windowsStore = useFeixunWindowsStore()
 const userStore = useUserStore()
-
-const pendingFilePath = ref('')
-const pendingFilePreview = ref('')
-
-async function handleFileAttach(event) {
-  const file = event.target.files?.[0]
-  if (!file) return
-  pendingFilePreview.value = URL.createObjectURL(file)
-  try {
-    const fd = new FormData()
-    fd.append('file', file)
-    const res = await request.post('/chat/upload', fd, { headers: { 'Content-Type': 'multipart/form-data' } })
-    const data = res.data || res
-    pendingFilePath.value = data.image_path
-    ElMessage.success(`已附加: ${file.name}`)
-  } catch (e) {
-    pendingFilePreview.value = ''
-    ElMessage.error('上传失败: ' + (e.response?.data?.detail || e.message))
-  }
-  event.target.value = ''
-}
 
 function generateSessionId() {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
@@ -1128,7 +1108,7 @@ function handleWindowDragStart(event) {
 const phrolova = {
   name: '弗洛洛',
   avatar: '/avatars/phrolova.webp',
-  elementIcon: '/icons/Phro_Games_logo.webp',
+  elementIcon: '/logo-40.webp',
 }
 
 function touchSessionAfterUserSend() {
@@ -1561,16 +1541,12 @@ function handleSend() {
   const chat = chatState()
   if (!chat) return
 
-  const imagePath = pendingFilePath.value
-  const imagePreview = pendingFilePreview.value
-  pendingFilePath.value = ''
-  pendingFilePreview.value = ''
   inputText.value = ''
   nextTick(autoResize)
 
   stickToBottom.value = true
   dismissScrollToBottomBtn()
-  chat.messages.push({ role: 'user', content: text, imagePreview })
+  chat.messages.push({ role: 'user', content: text })
   touchSessionAfterUserSend()
   chat.messages.push({ role: 'assistant', content: '' })
   chat.isLoading = true
@@ -1579,7 +1555,6 @@ function handleSend() {
     '/api/chat/stream',
     {
       message: text,
-      image_path: imagePath || undefined,
       history: buildHistory().slice(0, -2),
     },
     {
@@ -2058,17 +2033,12 @@ $phro-ear-h-pct: calc(#{$phro-ear-h} / #{$phro-frame-h} * 100%);
 
 .feixun-window-ear__icon {
   display: block;
-  width: 100%;
+  width: auto;
   height: 100%;
   max-width: 100%;
-  max-height: 100%;
   object-fit: contain;
   object-position: center;
   pointer-events: none;
-  user-select: none;
-  -webkit-user-drag: none;
-  mix-blend-mode: lighten;
-  opacity: 0.95;
 }
 
 .feixun-window {
@@ -2480,6 +2450,8 @@ $phro-ear-h-pct: calc(#{$phro-ear-h} / #{$phro-frame-h} * 100%);
 .chat-header {
   padding: 16px 20px 14px;
   cursor: default;
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 .chat-partner {
@@ -2662,7 +2634,6 @@ $phro-ear-h-pct: calc(#{$phro-ear-h} / #{$phro-frame-h} * 100%);
   padding: 12px 16px;
   overscroll-behavior: contain;
   touch-action: auto;
-  user-select: text;
 
   &::-webkit-scrollbar {
     width: 4px;
@@ -2722,6 +2693,8 @@ $phro-ear-h-pct: calc(#{$phro-ear-h} / #{$phro-frame-h} * 100%);
   color: $phro-text-mid;
   font-size: 14px;
   text-align: center;
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 // ── 消息气泡 ──
@@ -2835,6 +2808,9 @@ $msg-bubble-tail-top: 14px;
   line-height: 1.65;
   word-break: break-word;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+  user-select: text;
+  -webkit-user-select: text;
+  -webkit-user-drag: none;
 
   &.incoming {
     background: $bubble-in;
@@ -2915,6 +2891,9 @@ $msg-bubble-tail-top: 14px;
 .msg-text {
   font-size: 14px;
   color: $phro-text-deep;
+  user-select: text;
+  -webkit-user-select: text;
+  -webkit-user-drag: none;
 }
 .chat-input-bar {
   position: relative;
@@ -2942,6 +2921,8 @@ $msg-bubble-tail-top: 14px;
   overflow-y: auto;
   scrollbar-width: none;
   -ms-overflow-style: none;
+  user-select: text;
+  -webkit-user-select: text;
 
   &::-webkit-scrollbar {
     width: 0;
@@ -2970,6 +2951,10 @@ $msg-bubble-tail-top: 14px;
 }
 
 :deep(.markdown-body) {
+  user-select: text;
+  -webkit-user-select: text;
+  -webkit-user-drag: none;
+
   p {
     margin: 0 0 6px;
 
@@ -2995,25 +2980,5 @@ $msg-bubble-tail-top: 14px;
   50% {
     opacity: 1;
   }
-}
-
-.attach-btn {
-  padding: 6px 10px;
-  font-size: 16px;
-  background: transparent;
-  border: none;
-  cursor: pointer;
-  opacity: 0.6;
-  flex-shrink: 0;
-
-  &:hover { opacity: 1; }
-}
-
-.msg-attach-preview {
-  max-width: 200px;
-  max-height: 150px;
-  border-radius: 8px;
-  object-fit: cover;
-  border: 1px solid rgba($phro-gold, 0.2);
 }
 </style>
