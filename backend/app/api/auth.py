@@ -82,6 +82,7 @@ async def login(request: UserLogin, db: Session = Depends(get_db)):
             "username": user.username,
             "email": user.email,
             "avatar": user.avatar,
+            "is_superuser": user.is_superuser,
             "roles": roles,
         },
     }, message="登录成功")
