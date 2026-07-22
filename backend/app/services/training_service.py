@@ -91,6 +91,14 @@ def _run_training(task_id: int, data_yaml: str):
             epoch = trainer.epoch + 1
             metrics_dict = trainer.metrics
 
+            # 最后一个 epoch 可能重复触发，跳过已存在的
+            existing = db.query(TrainingMetric).filter(
+                TrainingMetric.task_id == task.id,
+                TrainingMetric.epoch == epoch,
+            ).first()
+            if existing:
+                return
+
             progress = int(epoch / task.epochs * 100)
 
             m = TrainingMetric(
