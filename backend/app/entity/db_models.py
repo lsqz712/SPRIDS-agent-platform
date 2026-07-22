@@ -459,6 +459,25 @@ class PCBBatch(Base):
     created_at = Column(DateTime, default=datetime.now)
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
 
+    images = relationship("BatchImage", back_populates="batch", cascade="all, delete-orphan")
+
+
+class BatchImage(Base):
+    """批次图片表 — 存储批次关联的PCB检测图片"""
+    __tablename__ = "batch_images"
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    batch_id = Column(Integer, ForeignKey("pcb_batches.id", ondelete="CASCADE"), nullable=False, index=True, comment="关联批次")
+    image_path = Column(String(500), nullable=False, comment="图片相对路径")
+    image_url = Column(String(500), nullable=False, comment="图片访问URL")
+    filename = Column(String(200), nullable=False, comment="原始文件名")
+    file_size = Column(Integer, nullable=True, comment="文件大小（字节）")
+    image_width = Column(Integer, nullable=True, comment="图片宽度")
+    image_height = Column(Integer, nullable=True, comment="图片高度")
+    status = Column(String(20), default="pending", comment="状态：pending/detected/pass/fail")
+    created_at = Column(DateTime, default=datetime.now)
+
+    batch = relationship("PCBBatch", back_populates="images")
+
 class DefectType(Base):
     """缺陷类型字典表 — 标准化管理PCB缺陷类型"""
     __tablename__ = "defect_types"

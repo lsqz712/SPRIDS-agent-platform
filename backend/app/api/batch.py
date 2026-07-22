@@ -1,13 +1,16 @@
-﻿"""
+"""
 PCB批次 API 路由
 - GET    /api/batches             批次列表（分页、筛选）
-- POST   /api/batches             创建批次（需认证）
+- POST   /api/batches             创建批次（需认证，支持图片上传）
 - GET    /api/batches/{id}        批次详情（含良品率统计）
 - PUT    /api/batches/{id}        编辑批次（需认证）
 - DELETE /api/batches/{id}        删除批次（需认证）
 - GET    /api/batches/{id}/statistics  批次良品率统计
+- POST   /api/batches/{id}/upload     向批次导入图片
+- POST   /api/batches/{id}/detect     批次一键检测
+- GET    /api/batches/{id}/images     获取批次图片列表
 """
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, File, UploadFile, Form
 from sqlalchemy.orm import Session
 
 from app.database.session import get_db
@@ -59,18 +62,28 @@ async def list_batches(
 
 @router.post("", response_model=dict, status_code=201)
 async def create_batch(
-    data: BatchCreate,
+    batch_no: str = Form(..., description="批次号，如 BATCH-20250701-001"),
+    pcb_type: str = Form(..., description="PCB型号，如 PCB-V2.1"),
+    production_line: str = Form(..., description="产线编号，如 LINE-A01"),
+    total_count: int = Form(default=0, description="批次总数量（不传则根据导入图片数量自动计算）"),
+    files: list[UploadFile] = File(default=None, description="批次图片（可选，支持多张）"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user),
 ):
     """
     创建PCB批次（需要登录）
-    - **batch_no**: 批次号，如 BATCH-20250701-001
-    - **pcb_type**: PCB型号，如 PCB-V2.1
-    - **production_line**: 产线编号，如 LINE-A01
-    - **total_count**: 批次总数量
+    - 支持创建时导入图片
+    - 如果不传total_count，会根据导入的图片数量自动计算
     """
-    batch = batch_service.create_batch(db=db, data=data, user_id=current_user.id)
+    batch = batch_service.create_batch_with_images(
+        db=db,
+        batch_no=batch_no,
+        pcb_type=pcb_type,
+        production_line=production_line,
+        total_count=total_count,
+        files=files or [],
+        user_id=current_user.id,
+    )
     return {
         "code": 201,
         "message": "批次创建成功",
@@ -89,9 +102,11 @@ async def get_batch(
     """
     batch = batch_service.get_batch_by_id(db=db, batch_id=batch_id)
     statistics = batch_service.get_batch_statistics(db=db, batch=batch)
+    images = batch_service.get_batch_images(db=db, batch_id=batch_id)
 
     batch_data = BatchResponse.model_validate(batch).model_dump()
     batch_data.update(statistics)
+    batch_data["images"] = images
 
     return {
         "code": 200,
@@ -154,4 +169,73 @@ async def get_batch_statistics(
             "batch_no": batch.batch_no,
             **statistics,
         },
+    }
+
+
+@router.post("/{batch_id}/upload", response_model=dict)
+async def upload_batch_images(
+    batch_id: int,
+    files: list[UploadFile] = File(..., description="批次图片（支持多张）"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
+    """
+    向批次导入图片
+    - 支持一次导入多张图片
+    - 图片会存储到MinIO
+    """
+    result = batch_service.upload_batch_images(
+        db=db,
+        batch_id=batch_id,
+        files=files,
+        user_id=current_user.id,
+    )
+    return {
+        "code": 200,
+        "message": "图片上传成功",
+        "data": result,
+    }
+
+
+@router.get("/{batch_id}/images", response_model=dict)
+async def get_batch_images(
+    batch_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
+    """
+    获取批次图片列表
+    """
+    images = batch_service.get_batch_images(db=db, batch_id=batch_id)
+    return {
+        "code": 200,
+        "message": "success",
+        "data": images,
+    }
+
+
+@router.post("/{batch_id}/detect", response_model=dict)
+async def detect_batch(
+    batch_id: int,
+    conf: float = Form(default=0.25, description="置信度阈值"),
+    scene_id: int = Form(default=None, description="场景ID"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
+    """
+    批次一键检测
+    - 将批次中的所有图片打包发送到检测工作台进行检测
+    - 检测结果自动关联到该批次
+    """
+    result = batch_service.detect_batch(
+        db=db,
+        batch_id=batch_id,
+        conf=conf,
+        scene_id=scene_id,
+        user_id=current_user.id,
+    )
+    return {
+        "code": 200,
+        "message": "批次检测任务已创建",
+        "data": result,
     }
