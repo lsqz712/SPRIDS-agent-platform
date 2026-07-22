@@ -117,11 +117,11 @@ const userAnchorRef = ref(null)
 const activeMenu = computed(() => `/${route.path.split('/')[1]}`)
 
 const allMenuItems = [
-  { path: '/detection', title: '检测工作台', icon: Camera, roles: ['admin', 'operator', 'engineer', 'viewer'] },
+  { path: '/detection', title: '检测工作台', icon: Camera, roles: ['admin', 'operator', 'viewer'] },
   { path: '/training', title: '模型训练', icon: Cpu, roles: ['admin', 'engineer'] },
-  { path: '/history', title: '历史记录', icon: Clock, roles: ['admin', 'operator', 'engineer'] },
-  { path: '/batches', title: '批次管理', icon: Box, roles: ['admin', 'operator', 'engineer'] },
-  { path: '/defect-types', title: '缺陷类型', icon: CollectionTag, roles: ['admin', 'operator', 'engineer'] },
+  { path: '/history', title: '历史记录', icon: Clock, roles: ['admin', 'operator'] },
+  { path: '/batches', title: '批次管理', icon: Box, roles: ['admin', 'operator'] },
+  { path: '/defect-types', title: '缺陷类型', icon: CollectionTag, roles: ['admin', 'engineer'] },
 ]
 
 const navMenuItems = computed(() => {

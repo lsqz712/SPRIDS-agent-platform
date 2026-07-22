@@ -104,15 +104,11 @@ ROLE_PERMISSIONS = {
     "operator": [
         "detection:create", "detection:read", "detection:review", "detection:camera", "detection:video",
         "scene:read",
-        "model:read",
-        "statistics:read",
     ],
     "engineer": [
-        "detection:read",
         "scene:create", "scene:read", "scene:update", "scene:delete",
         "model:create", "model:read", "model:update", "model:delete", "model:train",
         "dataset:create", "dataset:read", "dataset:update", "dataset:delete",
-        "statistics:read",
     ],
     "viewer": [
         "detection:create",

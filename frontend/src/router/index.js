@@ -35,7 +35,7 @@ const routes = [
         path: 'detection',
         name: 'Detection',
         component: () => import('@/views/DetectionPage.vue'),
-        meta: { title: '检测工作台', icon: 'Camera', roles: ['admin', 'operator', 'engineer', 'viewer'] },
+        meta: { title: '检测工作台', icon: 'Camera', roles: ['admin', 'operator', 'viewer'] },
       },
       {
         path: 'training',
@@ -47,19 +47,19 @@ const routes = [
         path: 'history',
         name: 'History',
         component: () => import('@/views/HistoryPage.vue'),
-        meta: { title: '历史记录', icon: 'Clock', roles: ['admin', 'operator', 'engineer'] },
+        meta: { title: '历史记录', icon: 'Clock', roles: ['admin', 'operator'] },
       },
       {
         path: 'batches',
         name: 'Batches',
         component: () => import('@/views/BatchesPage.vue'),
-        meta: { title: '批次管理', icon: 'Package', roles: ['admin', 'operator', 'engineer'] },
+        meta: { title: '批次管理', icon: 'Package', roles: ['admin', 'operator'] },
       },
       {
         path: 'defect-types',
         name: 'DefectTypes',
         component: () => import('@/views/DefectTypesPage.vue'),
-        meta: { title: '缺陷类型', icon: 'Tags', roles: ['admin', 'operator', 'engineer'] },
+        meta: { title: '缺陷类型', icon: 'Tags', roles: ['admin', 'engineer'] },
       },
       {
         path: 'role-approvals',
