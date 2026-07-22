@@ -23,7 +23,7 @@ from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 
 from app.api.auth import get_current_user
-from app.api.deps import get_current_active_user
+from app.api.deps import get_current_active_user, check_permission
 from app.core.logger import get_logger
 from app.database.session import get_db
 from app.entity.schemas import SceneResponse
@@ -66,6 +66,7 @@ async def detect_single_api(
     conf: float = Form(0.25, description="置信度阈值"),
     scene_id: int = Form(None, description="场景 ID"),
     current_user=Depends(get_current_active_user),
+    _perm=Depends(check_permission("detection:create")),
 ):
     """快捷单图检测（跳过 LLM，直接调⽤ YOLO）"""
     suffix = os.path.splitext(file.filename)[1] or ".jpg"
@@ -92,6 +93,7 @@ async def detect_batch_api(
     conf: float = Form(0.25),
     scene_id: int = Form(None),
     current_user=Depends(get_current_active_user),
+    _perm=Depends(check_permission("detection:create")),
 ):
     """快捷批量检测"""
     temp_paths = []
@@ -123,6 +125,7 @@ async def detect_zip_api(
     conf: float = Form(0.25),
     scene_id: int = Form(None),
     current_user=Depends(get_current_active_user),
+    _perm=Depends(check_permission("detection:create")),
 ):
     """快捷 ZIP 检测：解压 ZIP 并批量检测其中所有图⽚"""
     suffix = os.path.splitext(file.filename)[1] or ".zip"
@@ -173,6 +176,7 @@ async def detect_video_api(
     use_scene_detection: bool = Form(True, description="开启场景变化检测"),
     scene_threshold: float = Form(10.0, description="场景变化阈值（灰度差）"),
     current_user=Depends(get_current_active_user),
+    _perm=Depends(check_permission("detection:create")),
 ):
     """视频检测：上传后异步处理，通过 status 接口轮询进度"""
     # 格式校验
