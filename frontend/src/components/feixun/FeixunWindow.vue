@@ -293,7 +293,7 @@
 
         <footer class="chat-input-bar">
           <input ref="fileInputRef" type="file" accept="image/*" style="display:none" @change="handleFileAttach" />
-          <button type="button" class="phro-btn attach-btn" :disabled="isLoading" @click="$refs.fileInputRef.click()" title="附加图片">📎</button>
+          <button type="button" class="phro-btn attach-btn" :disabled="isLoading" @click="fileInputRef.click()" title="附加图片">📎</button>
           <textarea
             ref="inputRef"
             v-model="inputText"
@@ -368,6 +368,7 @@ const emit = defineEmits(['focus', 'dragging-change'])
 const windowsStore = useFeixunWindowsStore()
 const userStore = useUserStore()
 
+const fileInputRef = ref(null)
 const pendingFilePath = ref('')
 const pendingFilePreview = ref('')
 
