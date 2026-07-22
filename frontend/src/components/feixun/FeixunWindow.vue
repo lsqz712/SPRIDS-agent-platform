@@ -1564,6 +1564,10 @@ function handleSend() {
         if (!last || last.role !== 'assistant') return
 
         switch (data.type) {
+          case 'thinking': {
+            last.thinking = true
+            break
+          }
           case 'route': {
             // 显示路由信息
             last.routeAgent = data.content

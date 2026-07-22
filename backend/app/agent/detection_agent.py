@@ -836,7 +836,10 @@ class DetectionAgent:
             ):
                 event_kind = event["event"]
 
-                if event_kind == "on_chat_model_stream":
+                if event_kind == "on_chat_model_start":
+                    yield {"type": "thinking", "content": "思考中…"}
+
+                elif event_kind == "on_chat_model_stream":
                     chunk = event["data"]["chunk"]
                     if hasattr(chunk, "content") and chunk.content:
                         full_output += chunk.content
