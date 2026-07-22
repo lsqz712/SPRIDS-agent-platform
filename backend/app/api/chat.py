@@ -23,6 +23,9 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
 from app.agent.multi_agent_orchestrator import multi_agent_orchestrator
+from app.agent.graph import build_agent_graph
+from app.agent.state import AgentState
+from app.agent.detection_agent import DETECTION_TOOLS, create_llm
 from app.api.deps import get_current_user, get_chat_user
 from app.api.utils import success_response
 from app.config.settings import settings
@@ -112,6 +115,71 @@ async def chat_stream(
             "Connection": "keep-alive",
             "X-Accel-Buffering": "no",
         },
+    )
+
+
+@router.post("/stream/graph")
+async def chat_stream_graph(
+    request: Request,
+    current_user=Depends(get_current_user),
+):
+    """SSE 流式对话（LangGraph 多 Agent 编排模式）"""
+    body = await request.json()
+    message = body.get("message", "")
+    image_path = body.get("image_path")
+    session_id = body.get("session_id")
+
+    if not message:
+        raise HTTPException(status_code=400, detail="消息内容不能为空")
+
+    # Build the graph lazily
+    try:
+        llm = create_llm()
+    except Exception:
+        llm = None
+    tools = DETECTION_TOOLS
+    agent_graph = build_agent_graph(llm, tools)
+
+    initial_state = AgentState(
+        user_input=message,
+        attached_images=[image_path] if image_path else [],
+        user_id=current_user.id if current_user else None,
+        session_id=session_id,
+    )
+
+    config = {"configurable": {"thread_id": session_id or message[:20]}}
+
+    async def event_generator():
+        try:
+            yield f"data: {json.dumps({'type': 'route', 'content': 'graph'}, ensure_ascii=False)}\n\n"
+
+            async for event in agent_graph.astream_events(
+                initial_state.model_dump(), config, version="v2"
+            ):
+                kind = event.get("event", "")
+                if kind == "on_chat_model_stream":
+                    chunk = event.get("data", {}).get("chunk", {})
+                    if hasattr(chunk, "content") and chunk.content:
+                        yield f"data: {json.dumps({'type': 'text_chunk', 'content': chunk.content}, ensure_ascii=False)}\n\n"
+                elif kind == "on_tool_start":
+                    tool_name = event.get("name", "")
+                    tool_input = event.get("data", {}).get("input", {})
+                    yield f"data: {json.dumps({'type': 'tool_call', 'tool': tool_name, 'input': str(tool_input)[:200]}, ensure_ascii=False)}\n\n"
+                elif kind == "on_tool_end":
+                    tool_name = event.get("name", "")
+                    output = str(event.get("data", {}).get("output", ""))[:500]
+                    yield f"data: {json.dumps({'type': 'tool_result', 'tool': tool_name, 'result': output}, ensure_ascii=False)}\n\n"
+
+            yield "data: [DONE]\n\n"
+
+        except Exception as e:
+            logger.error("LangGraph stream error: %s", str(e), exc_info=True)
+            yield f"data: {json.dumps({'type': 'error', 'content': str(e)}, ensure_ascii=False)}\n\n"
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "Connection": "keep-alive", "X-Accel-Buffering": "no"},
     )
 
 

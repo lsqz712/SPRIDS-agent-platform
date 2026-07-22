@@ -34,30 +34,35 @@ class UserService:
         if role not in valid_roles:
             raise HTTPException(status_code=400, detail=f"无效的角色，可选: {', '.join(valid_roles)}")
 
-        new_user = User(
-            username=username,
-            email=email,
-            hashed_password=hash_password(password),
-        )
-        db.add(new_user)
-        db.commit()
-        db.refresh(new_user)
-
         target_role = db.query(Role).filter(Role.name == role).first()
         if not target_role:
             raise HTTPException(status_code=500, detail="角色不存在")
 
         if role in REQUIRE_APPROVAL_ROLES:
-            new_user.is_approved = False
+            new_user = User(
+                username=username,
+                email=email,
+                hashed_password=hash_password(password),
+                is_approved=False,
+            )
+            db.add(new_user)
+            db.flush()
+
             application = RoleApplication(
                 user_id=new_user.id,
                 role_id=target_role.id,
                 status="pending",
             )
             db.add(application)
-            db.commit()
         else:
-            new_user.is_approved = True
+            new_user = User(
+                username=username,
+                email=email,
+                hashed_password=hash_password(password),
+                is_approved=True,
+            )
+            db.add(new_user)
+            db.flush()
             user_role_service.assign_role_to_user(db, new_user.id, target_role.id)
 
         db.commit()
@@ -219,6 +224,48 @@ class UserService:
                 pass
 
         return user
+
+    @staticmethod
+    def get_role_applications(db: Session, status: str = None) -> list:
+        """获取角色申请列表"""
+        from app.entity.db_models import RoleApplication
+        query = db.query(RoleApplication)
+        if status:
+            query = query.filter(RoleApplication.status == status)
+        return query.order_by(RoleApplication.applied_at.desc()).all()
+
+    @staticmethod
+    def get_user_role_applications(db: Session, user_id: int) -> list:
+        """获取用户的角色申请历史"""
+        from app.entity.db_models import RoleApplication
+        return db.query(RoleApplication).filter(
+            RoleApplication.user_id == user_id
+        ).order_by(RoleApplication.applied_at.desc()).all()
+
+    @staticmethod
+    def approve_role_application(db: Session, application_id: int, approver_id: int, status: str, comment: str = None):
+        """审批角色申请"""
+        from datetime import datetime
+        from fastapi import HTTPException
+        from app.entity.db_models import RoleApplication, UserRole
+        app = db.query(RoleApplication).filter(RoleApplication.id == application_id).first()
+        if not app:
+            raise HTTPException(status_code=404, detail="申请不存在")
+        if app.status != "pending":
+            raise HTTPException(status_code=400, detail="该申请已处理")
+        app.status = status
+        app.approver_id = approver_id
+        app.approve_comment = comment
+        app.approved_at = datetime.now()
+        if status == "approved":
+            existing = db.query(UserRole).filter(
+                UserRole.user_id == app.user_id, UserRole.role_id == app.role_id
+            ).first()
+            if not existing:
+                db.add(UserRole(user_id=app.user_id, role_id=app.role_id))
+        db.commit()
+        db.refresh(app)
+        return app
 
 
 user_service = UserService()

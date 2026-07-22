@@ -16,7 +16,7 @@
           <span class="result-name">{{ det.class_name_cn || det.class_name }}</span>
           <span class="result-conf">{{ (det.confidence * 100).toFixed(1) }}%</span>
         </div>
-        <span class="result-bbox">{{ formatBbox(det.bbox) }}</span>
+        <span class="result-bbox" :title="formatBbox(det.bbox)">{{ formatBbox(det.bbox) }}</span>
       </li>
     </ul>
     <div v-if="summary" class="result-summary">
@@ -59,14 +59,18 @@ function formatBbox(bbox) {
 .result-panel {
   @include phro.phro-module-stack;
   height: 100%;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .result-list {
   list-style: none;
   margin: 0;
   padding: 0;
-  max-height: 320px;
+  flex: 1;
+  min-height: 0;
   overflow-y: auto;
+  overflow-x: hidden;
 }
 
 .result-item {
@@ -77,6 +81,7 @@ function formatBbox(bbox) {
   border-radius: $phro-radius-sm;
   cursor: pointer;
   transition: background 0.15s;
+  min-width: 0;
 
   &:hover,
   &.active {
@@ -102,18 +107,28 @@ function formatBbox(bbox) {
 .result-name {
   font-size: 13px;
   color: $phro-text-deep;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .result-conf {
   font-size: 12px;
   color: $phro-gold;
   font-weight: 600;
+  flex-shrink: 0;
 }
 
 .result-bbox {
   font-size: 10px;
   color: $phro-text-mid;
   font-family: monospace;
+  flex-shrink: 1;
+  min-width: 0;
+  max-width: 42%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .result-summary {

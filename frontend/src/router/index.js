@@ -29,49 +29,43 @@ const routes = [
         path: 'chat',
         name: 'Chat',
         component: () => import('@/views/ChatPage.vue'),
-        meta: { title: '智能对话', icon: 'ChatDotRound' },
+        meta: { title: '智能对话', icon: 'ChatDotRound', roles: ['admin', 'operator', 'engineer', 'viewer'] },
       },
       {
         path: 'detection',
         name: 'Detection',
         component: () => import('@/views/DetectionPage.vue'),
-        meta: { title: '检测工作台', icon: 'Camera' },
+        meta: { title: '检测工作台', icon: 'Camera', roles: ['admin', 'operator', 'engineer', 'viewer'] },
       },
       {
         path: 'training',
         name: 'Training',
         component: () => import('@/views/TrainingPage.vue'),
-        meta: { title: '模型训练', icon: 'Cpu' },
+        meta: { title: '模型训练', icon: 'Cpu', roles: ['admin', 'engineer'] },
       },
       {
         path: 'history',
         name: 'History',
         component: () => import('@/views/HistoryPage.vue'),
-        meta: { title: '历史记录', icon: 'Clock' },
-      },
-      {
-        path: 'dashboard',
-        name: 'Dashboard',
-        component: () => import('@/views/DashboardPage.vue'),
-        meta: { title: '数据看板', icon: 'DataAnalysis' },
-      },
-      {
-        path: 'tasks',
-        name: 'Tasks',
-        component: () => import('@/views/TasksPage.vue'),
-        meta: { title: '任务管理', icon: 'Document' },
+        meta: { title: '历史记录', icon: 'Clock', roles: ['admin', 'operator', 'engineer'] },
       },
       {
         path: 'batches',
         name: 'Batches',
         component: () => import('@/views/BatchesPage.vue'),
-        meta: { title: '批次管理', icon: 'Package' },
+        meta: { title: '批次管理', icon: 'Package', roles: ['admin', 'operator', 'engineer'] },
       },
       {
         path: 'defect-types',
         name: 'DefectTypes',
         component: () => import('@/views/DefectTypesPage.vue'),
-        meta: { title: '缺陷类型', icon: 'Tags' },
+        meta: { title: '缺陷类型', icon: 'Tags', roles: ['admin', 'operator', 'engineer'] },
+      },
+      {
+        path: 'role-approvals',
+        name: 'RoleApprovals',
+        component: () => import('@/views/RoleApprovalsPage.vue'),
+        meta: { title: '角色审批', icon: 'Checked', roles: ['admin'] },
       },
       {
         path: 'profile',
@@ -104,11 +98,23 @@ router.beforeEach((to, from, next) => {
 
   if (requiresAuth && !token) {
     next({ path: '/login', query: { redirect: to.fullPath } })
-  } else if ((to.path === '/login' || to.path === '/register') && token) {
-    next('/')
-  } else {
-    next()
+    return
   }
+
+  if ((to.path === '/login' || to.path === '/register') && token) {
+    next('/')
+    return
+  }
+
+  const userRoles = JSON.parse(localStorage.getItem('rsod_user') || '{}').roles || []
+  const routeRoles = to.meta.roles || []
+
+  if (routeRoles.length > 0 && !routeRoles.some(role => userRoles.includes(role))) {
+    next('/detection')
+    return
+  }
+
+  next()
 })
 
 export default router

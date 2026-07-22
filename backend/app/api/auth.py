@@ -49,12 +49,8 @@ async def register(request: UserRegister, db: Session = Depends(get_db)):
         username=request.username,
         email=request.email,
         password=request.password,
-        role=request.role or "viewer",
+        role=request.role,
     )
-    
-    approval_status = "pending" if not user.is_approved else "approved"
-    message = "注册成功，请等待管理员审批" if not user.is_approved else "注册成功"
-    
     return success_response(data={
         "id": user.id,
         "username": user.username,
@@ -63,13 +59,10 @@ async def register(request: UserRegister, db: Session = Depends(get_db)):
         "avatar": user.avatar,
         "is_active": user.is_active,
         "is_superuser": user.is_superuser,
-        "is_approved": user.is_approved,
-        "approval_status": approval_status,
-        "applied_role": request.role,
         "roles": [],
         "last_login_at": user.last_login_at,
         "created_at": user.created_at,
-    }, message=message)
+    }, message="注册成功")
 
 
 @router.post("/login")
@@ -84,7 +77,13 @@ async def login(request: UserLogin, db: Session = Depends(get_db)):
     return success_response(data={
         "access_token": access_token,
         "token_type": "bearer",
-        "user": serialize_user(user, roles),
+        "user": {
+            "id": user.id,
+            "username": user.username,
+            "email": user.email,
+            "avatar": user.avatar,
+            "roles": roles,
+        },
     }, message="登录成功")
 
 

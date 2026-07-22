@@ -52,11 +52,14 @@ async def get_current_user(
 async def get_current_active_user(
     current_user: User = Depends(get_current_user),
 ) -> User:
-    """验证当前用户是否已被禁用"""
+    """验证当前用户是否已被禁用/未审批"""
     if current_user is None:
         raise HTTPException(status_code=401, detail="未登录")
     if not current_user.is_active:
         raise HTTPException(status_code=403, detail="用户已被禁用")
+    is_approved = getattr(current_user, 'is_approved', None)
+    if is_approved is not None and not is_approved and not current_user.is_superuser:
+        raise HTTPException(status_code=403, detail="账户尚未通过审批，请联系管理员")
     return current_user
 
 
@@ -124,3 +127,24 @@ async def get_chat_user(
         return ChatUser(user_id=user.id, username=user.username)
     except (JWTError, ValueError) as exc:
         raise credentials_exception from exc
+
+
+def check_permission(permission_code: str = None):
+    """权限校验依赖工厂 — 用法: Depends(check_permission("role:read"))"""
+    from fastapi import Depends, HTTPException
+    from app.database.session import get_db
+    from app.entity.db_models import User
+    from app.services.role_service import user_role_service
+
+    async def _check(
+        db=Depends(get_db),
+        current_user=Depends(get_current_user),
+    ):
+        if permission_code is None:
+            return True
+        if current_user.is_superuser:
+            return True
+        if not user_role_service.has_permission(db, current_user.id, permission_code):
+            raise HTTPException(status_code=403, detail=f"缺少权限: {permission_code}")
+        return True
+    return _check

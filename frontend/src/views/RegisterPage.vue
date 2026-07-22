@@ -49,6 +49,16 @@
         </div>
 
         <div class="register-field register-module">
+          <el-form-item prop="role">
+            <el-select v-model="registerForm.role" placeholder="选择角色" style="width:100%">
+              <el-option label="质检操作员 (operator)" value="operator" />
+              <el-option label="数据工程师 (engineer)" value="engineer" />
+              <el-option label="普通访客 (viewer)" value="viewer" />
+            </el-select>
+          </el-form-item>
+        </div>
+
+        <div class="register-field register-module">
           <el-form-item prop="confirmPassword">
             <el-input
               v-model="registerForm.confirmPassword"
