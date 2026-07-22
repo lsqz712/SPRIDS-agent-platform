@@ -93,6 +93,14 @@ export const useUserStore = defineStore('user', {
       this.user = null
       localStorage.removeItem(TOKEN_KEY)
       localStorage.removeItem(USER_KEY)
+      // 清空 Feixun 历史防止跨用户串数据
+      localStorage.removeItem('phrolova_chat_sessions')
+      // 清空所有 feixun 相关 localStorage
+      for (const key of Object.keys(localStorage)) {
+        if (key.startsWith('feixun') || key.startsWith('phrolova_chat')) {
+          localStorage.removeItem(key)
+        }
+      }
     },
 
     /** 开发环境：跳过登录，直接进入内页预览 */
