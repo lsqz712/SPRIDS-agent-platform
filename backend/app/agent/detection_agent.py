@@ -875,11 +875,11 @@ class DetectionAgent:
                     }
 
         except Exception as e:
-            logger.error("Agent 流式执行异常: %s", str(e), exc_info=True)
-            yield {
-                "type": "error",
-                "content": f"处理出错：{str(e)}",
-            }
+            logger.warning("LLM 调用失败，降级到模拟模式: %s", str(e))
+            yield {"type": "route", "content": "detection"}
+            yield {"type": "thinking", "content": "降级模式处理中…"}
+            async for event in self._simulate_chat_stream(message, image_path):
+                yield event
 
         finally:
             if session_id and full_output:
