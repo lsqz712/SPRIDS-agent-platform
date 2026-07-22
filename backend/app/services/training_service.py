@@ -96,9 +96,9 @@ def _run_training(task_id: int, data_yaml: str):
             m = TrainingMetric(
                 task_id=task.id,
                 epoch=epoch,
-                box_loss=_try_float(metrics_dict, "train/box_loss"),
-                cls_loss=_try_float(metrics_dict, "train/cls_loss"),
-                dfl_loss=_try_float(metrics_dict, "train/dfl_loss"),
+                box_loss=_try_float(metrics_dict, "val/box_loss"),
+                cls_loss=_try_float(metrics_dict, "val/cls_loss"),
+                dfl_loss=_try_float(metrics_dict, "val/dfl_loss"),
                 precision=_try_float(metrics_dict, "metrics/precision(B)"),
                 recall=_try_float(metrics_dict, "metrics/recall(B)"),
                 map50=_try_float(metrics_dict, "metrics/mAP50(B)"),
