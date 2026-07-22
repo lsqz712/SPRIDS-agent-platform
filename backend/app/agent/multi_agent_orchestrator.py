@@ -90,6 +90,7 @@ class MultiAgentOrchestrator:
             return
 
         logger.info(f"流式路由到 {route} Agent: {message[:50]}")
+        yield {"type": "thinking", "content": f"分析意图 → 分发到 {route} Agent"}
         yield {"type": "route", "content": route}
 
         try:

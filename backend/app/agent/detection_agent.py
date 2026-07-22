@@ -914,6 +914,7 @@ class DetectionAgent:
         }
 
     async def _simulate_chat_stream(self, message: str, image_path: str = None):
+        yield {"type": "thinking", "content": "分析请求，准备调用检测工具…"}
         import re
         zip_pattern = r'\.(zip|rar|7z)$'
         if image_path:
