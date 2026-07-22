@@ -211,6 +211,46 @@
         </section>
       </div>
 
+      <!-- 角色申请 -->
+      <section v-if="roleApps.length || userStore.isSuperuser" class="profile-block" style="margin-top:16px">
+        <div class="profile-block-head">
+          <h3 class="phro-module-title">{{ userStore.isSuperuser ? '角色审批' : '我的角色申请' }}</h3>
+        </div>
+        <el-table v-if="userStore.isSuperuser" :data="roleApps" stripe size="small" max-height="300">
+          <el-table-column prop="username" label="申请人" width="100" />
+          <el-table-column prop="email" label="邮箱" width="180" />
+          <el-table-column label="申请角色" width="140">
+            <template #default="{ row }">{{ row.role_display_name }}</template>
+          </el-table-column>
+          <el-table-column label="状态" width="90">
+            <template #default="{ row }">
+              <el-tag :type="row.status==='pending'?'warning':row.status==='approved'?'success':'danger'" size="small">
+                {{ row.status==='pending'?'待审批':row.status==='approved'?'已通过':'已拒绝' }}
+              </el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column label="操作" width="140" v-if="userStore.isSuperuser">
+            <template #default="{ row }">
+              <template v-if="row.status==='pending'">
+                <el-button size="small" type="success" @click="handleApprove(row.id,'approved')">通过</el-button>
+                <el-button size="small" type="danger" @click="handleApprove(row.id,'rejected')">拒绝</el-button>
+              </template>
+              <span v-else>-</span>
+            </template>
+          </el-table-column>
+        </el-table>
+        <div v-else-if="roleApps.length" class="profile-apps-list">
+          <div v-for="app in roleApps" :key="app.id" class="profile-app-item">
+            <span>{{ app.role_display_name }}</span>
+            <el-tag :type="app.status==='pending'?'warning':app.status==='approved'?'success':'danger'" size="small">
+              {{ app.status==='pending'?'待审批':app.status==='approved'?'已通过':'已拒绝' }}
+            </el-tag>
+            <span class="app-time">{{ formatTime(app.applied_at) }}</span>
+          </div>
+        </div>
+        <div v-else class="profile-app-empty">暂无角色申请记录</div>
+      </section>
+
       <footer class="profile-footer">
         <p class="profile-footer-note">账号信息来自登录会话，可随时同步最新数据</p>
         <div class="profile-footer-actions">
@@ -314,6 +354,7 @@ import { ElMessage } from 'element-plus'
 import PhroPageShell from '@/components/layout/PhroPageShell.vue'
 import PhroAvatarCropper from '@/components/profile/PhroAvatarCropper.vue'
 import PhroUserAvatar from '@/components/common/PhroUserAvatar.vue'
+import request from '@/utils/request'
 import { useUserStore } from '@/stores/user'
 import { showPhroConfirm } from '@/utils/phroMessageBox'
 import { AVATAR_ACCEPT, validateAvatarFile } from '@/utils/avatar'
@@ -322,6 +363,27 @@ import { getMyRoleApplicationsApi, getRoleApplicationsApi, approveRoleApplicatio
 const router = useRouter()
 const userStore = useUserStore()
 const loading = ref(false)
+const roleApps = ref([])
+
+async function loadRoleApps() {
+  try {
+    if (userStore.isSuperuser) {
+      const res = await request.get('/roles/applications/')
+      roleApps.value = res.data || res || []
+    } else {
+      const res = await request.get('/roles/me/applications')
+      roleApps.value = res.data || res || []
+    }
+  } catch (e) { console.error('load apps failed:', e) }
+}
+
+async function handleApprove(applicationId, status) {
+  try {
+    await request.post(`/roles/applications/${applicationId}/approve`, { status, comment: status === 'approved' ? '审批通过' : '已拒绝' })
+    ElMessage.success(status === 'approved' ? '已通过' : '已拒绝')
+    loadRoleApps()
+  } catch (e) { ElMessage.error(e.response?.data?.detail || '操作失败') }
+}
 const uploadingAvatar = ref(false)
 const avatarInputRef = ref(null)
 const avatarCropVisible = ref(false)
@@ -566,6 +628,7 @@ async function handleLogout() {
 }
 
 onMounted(() => {
+  loadRoleApps()
   if (userStore.token && userStore.token !== 'dev-preview' && !userStore.user?.email) {
     refreshProfile()
   }

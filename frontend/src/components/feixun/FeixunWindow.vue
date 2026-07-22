@@ -268,6 +268,7 @@
 
             <div v-else class="msg-outgoing">
               <div class="msg-body">
+                <img v-if="msg.imagePreview" :src="msg.imagePreview" class="msg-attach-preview" />
                 <div class="msg-bubble outgoing">
                   <div class="msg-text">{{ msg.content }}</div>
                 </div>
@@ -291,6 +292,8 @@
           </div>
 
         <footer class="chat-input-bar">
+          <input ref="fileInputRef" type="file" accept="image/*" style="display:none" @change="handleFileAttach" />
+          <button type="button" class="phro-btn attach-btn" :disabled="isLoading" @click="fileInputRef.click()" title="附加图片">📎</button>
           <textarea
             ref="inputRef"
             v-model="inputText"
@@ -364,6 +367,28 @@ const emit = defineEmits(['focus', 'dragging-change'])
 
 const windowsStore = useFeixunWindowsStore()
 const userStore = useUserStore()
+
+const fileInputRef = ref(null)
+const pendingFilePath = ref('')
+const pendingFilePreview = ref('')
+
+async function handleFileAttach(event) {
+  const file = event.target.files?.[0]
+  if (!file) return
+  pendingFilePreview.value = URL.createObjectURL(file)
+  try {
+    const fd = new FormData()
+    fd.append('file', file)
+    const res = await request.post('/chat/upload', fd, { headers: { 'Content-Type': 'multipart/form-data' } })
+    const data = res.data || res
+    pendingFilePath.value = data.image_path
+    ElMessage.success(`已附加: ${file.name}`)
+  } catch (e) {
+    pendingFilePreview.value = ''
+    ElMessage.error('上传失败: ' + (e.response?.data?.detail || e.message))
+  }
+  event.target.value = ''
+}
 
 function generateSessionId() {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
@@ -1537,12 +1562,16 @@ function handleSend() {
   const chat = chatState()
   if (!chat) return
 
+  const imagePath = pendingFilePath.value
+  const imagePreview = pendingFilePreview.value
+  pendingFilePath.value = ''
+  pendingFilePreview.value = ''
   inputText.value = ''
   nextTick(autoResize)
 
   stickToBottom.value = true
   dismissScrollToBottomBtn()
-  chat.messages.push({ role: 'user', content: text })
+  chat.messages.push({ role: 'user', content: text, imagePreview })
   touchSessionAfterUserSend()
   chat.messages.push({ role: 'assistant', content: '' })
   chat.isLoading = true
@@ -1551,6 +1580,7 @@ function handleSend() {
     '/api/chat/stream',
     {
       message: text,
+      image_path: imagePath || undefined,
       history: buildHistory().slice(0, -2),
     },
     {
@@ -1564,6 +1594,10 @@ function handleSend() {
         if (!last || last.role !== 'assistant') return
 
         switch (data.type) {
+          case 'thinking': {
+            last.thinking = true
+            break
+          }
           case 'route': {
             // 显示路由信息
             last.routeAgent = data.content
@@ -2962,5 +2996,25 @@ $msg-bubble-tail-top: 14px;
   50% {
     opacity: 1;
   }
+}
+
+.attach-btn {
+  padding: 6px 10px;
+  font-size: 16px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  opacity: 0.6;
+  flex-shrink: 0;
+
+  &:hover { opacity: 1; }
+}
+
+.msg-attach-preview {
+  max-width: 200px;
+  max-height: 150px;
+  border-radius: 8px;
+  object-fit: cover;
+  border: 1px solid rgba($phro-gold, 0.2);
 }
 </style>

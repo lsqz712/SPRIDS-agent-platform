@@ -17,6 +17,7 @@ from app.services.defect_type_service import defect_type_service
 router = APIRouter(prefix="/api/defect-types", tags=["缺陷类型字典"])
 
 
+@router.get("/seed")
 @router.post("/seed")
 async def seed_defect_types():
     """一键插入 6 种 PCB 缺陷类型（幂等）"""

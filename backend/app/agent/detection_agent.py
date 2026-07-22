@@ -836,7 +836,10 @@ class DetectionAgent:
             ):
                 event_kind = event["event"]
 
-                if event_kind == "on_chat_model_stream":
+                if event_kind == "on_chat_model_start":
+                    yield {"type": "thinking", "content": "思考中…"}
+
+                elif event_kind == "on_chat_model_stream":
                     chunk = event["data"]["chunk"]
                     if hasattr(chunk, "content") and chunk.content:
                         full_output += chunk.content
@@ -872,11 +875,11 @@ class DetectionAgent:
                     }
 
         except Exception as e:
-            logger.error("Agent 流式执行异常: %s", str(e), exc_info=True)
-            yield {
-                "type": "error",
-                "content": f"处理出错：{str(e)}",
-            }
+            logger.warning("LLM 调用失败，降级到模拟模式: %s", str(e))
+            yield {"type": "route", "content": "detection"}
+            yield {"type": "thinking", "content": "降级模式处理中…"}
+            async for event in self._simulate_chat_stream(message, image_path):
+                yield event
 
         finally:
             if session_id and full_output:
@@ -911,6 +914,7 @@ class DetectionAgent:
         }
 
     async def _simulate_chat_stream(self, message: str, image_path: str = None):
+        yield {"type": "thinking", "content": "分析请求，准备调用检测工具…"}
         import re
         zip_pattern = r'\.(zip|rar|7z)$'
         if image_path:

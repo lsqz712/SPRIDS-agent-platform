@@ -30,7 +30,8 @@ async def get_history_records(
     """获取历史检测记录列表（分页 + 筛选）"""
     tasks, total = history_service.get_history_records(
         db=db, page=page, page_size=page_size,
-        keyword=keyword, task_type=task_type, status=status,
+        user_id=current_user.id, keyword=keyword,
+        task_type=task_type, status=status,
     )
     return {
         "total": total,
@@ -57,7 +58,9 @@ async def get_task_detail(
 ):
     """获取检测任务详情（含结果列表）"""
     from app.entity.db_models import DetectionTask, DetectionResult
-    task = db.query(DetectionTask).filter(DetectionTask.id == task_id).first()
+    task = db.query(DetectionTask).filter(
+        DetectionTask.id == task_id, DetectionTask.user_id == current_user.id
+    ).first()
     if not task:
         return JSONResponse(status_code=404, content={"error": "任务不存在"})
     results = db.query(DetectionResult).filter(DetectionResult.task_id == task_id).all()
@@ -89,7 +92,9 @@ async def delete_task(
 ):
     """删除检测任务及其关联结果"""
     from app.entity.db_models import DetectionTask, DetectionResult
-    task = db.query(DetectionTask).filter(DetectionTask.id == task_id).first()
+    task = db.query(DetectionTask).filter(
+        DetectionTask.id == task_id, DetectionTask.user_id == current_user.id
+    ).first()
     if not task:
         return JSONResponse(status_code=404, content={"error": "任务不存在"})
     db.query(DetectionResult).filter(DetectionResult.task_id == task_id).delete()
