@@ -9,17 +9,6 @@
         <el-form label-position="top" class="training-form">
           <div class="phro-form-grid">
             <div class="phro-field">
-              <label>检测场景</label>
-              <el-select v-model="form.scene_id" style="width: 100%">
-                <el-option
-                  v-for="scene in scenes"
-                  :key="scene.id"
-                  :label="scene.display_name"
-                  :value="scene.id"
-                />
-              </el-select>
-            </div>
-            <div class="phro-field">
               <label>基础模型</label>
               <el-select v-model="form.model_name" style="width: 100%">
                 <el-option label="YOLOv11n（轻量）" value="yolov11n" />
@@ -149,11 +138,9 @@ import {
   withApiFallback,
 } from '@/services/spridsMock'
 import { createTrainingApi, listTrainingApi, getTrainingMetricsApi, getTrainingStatusApi } from '@/api/training'
-import { getScenesApi } from '@/api/detection'
+import { PCB_SCENE } from '@/constants/pcbDefects'
 
-const scenes = ref([])
 const form = ref({
-  scene_id: null,
   model_name: 'yolov11n',
   epochs: 50,
   img_size: 640,
@@ -196,7 +183,7 @@ async function loadTasks() {
 async function startTraining() {
   try {
     const task = await withApiFallback(
-      () => createTrainingApi({ ...form.value }).then((r) => r?.data || r),
+      () => createTrainingApi({ scene_id: PCB_SCENE.id, ...form.value }).then((r) => r?.data || r),
       () => mockCreateTraining(form.value),
     )
     activeTask.value = task
@@ -256,23 +243,7 @@ async function viewTask(row) {
   else stopPolling()
 }
 
-async function loadScenes() {
-  try {
-    const res = await getScenesApi()
-    const list = res?.data || res || []
-    scenes.value = Array.isArray(list) ? list : []
-    if (scenes.value.length > 0 && !form.value.scene_id) {
-      form.value.scene_id = scenes.value[0].id
-    }
-  } catch {
-    scenes.value = []
-  }
-}
-
-onMounted(async () => {
-  await loadScenes()
-  loadTasks()
-})
+onMounted(loadTasks)
 onBeforeUnmount(stopPolling)
 </script>
 
