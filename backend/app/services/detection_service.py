@@ -224,6 +224,13 @@ class DetectionService:
         return results, total
 
     @staticmethod
+    def _get_defect_type_id(db: Session, class_name: str) -> int | None:
+        """根据缺陷类别名查找 DefectType ID"""
+        from app.entity.db_models import DefectType as DT
+        dt = db.query(DT).filter(DT.name == class_name).first()
+        return dt.id if dt else None
+
+    @staticmethod
     def save_result(
         db: Session,
         task_id: int,
@@ -251,6 +258,7 @@ class DetectionService:
             inference_time=inference_time,
             image_width=image_width,
             image_height=image_height,
+            defect_type_id=DetectionService._get_defect_type_id(db, class_name),
         )
         db.add(result)
         db.commit()
@@ -330,7 +338,8 @@ class DetectionService:
                     class_name=d["class_name"], class_name_cn=d.get("class_name_cn"),
                     class_id=d["class_id"], confidence=d["confidence"], bbox=d["bbox"],
                     inference_time=d.get("inference_time"),
-                    image_width=result.get("image_width"), image_height=result.get("image_height")))
+                    image_width=result.get("image_width"), image_height=result.get("image_height"),
+                    defect_type_id=DetectionService._get_defect_type_id(db, d["class_name"])))
             # 4. 更新状态
             task.status = TaskStatus.COMPLETED
             task.total_images = 1
@@ -641,7 +650,8 @@ class DetectionService:
                     db.add(DetectionResult(task_id=task_id or task.id,
                         image_path=f"frame_{fidx}.jpg",
                         class_name=d["class_name"], class_id=d["class_id"],
-                        confidence=d["confidence"], bbox=d["bbox"], inference_time=itime))
+                        confidence=d["confidence"], bbox=d["bbox"], inference_time=itime,
+                        defect_type_id=DetectionService._get_defect_type_id(db, d["class_name"])))
 
             # 创建标注视频输出
             project_tmp = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "temp")
