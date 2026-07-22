@@ -32,6 +32,9 @@ class RateLimiterMiddleware(BaseHTTPMiddleware):
         if path.startswith("/docs") or path.startswith("/redoc"):
             return await call_next(request)
 
+        if path.startswith("/api/training/"):
+            return await call_next(request)
+
         limit_config = self.RATE_LIMITS.get(path)
         if not limit_config:
             limit_config = {"limit": self.DEFAULT_LIMIT, "window": self.DEFAULT_WINDOW}
