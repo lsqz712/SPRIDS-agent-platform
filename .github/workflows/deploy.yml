@@ -1,6 +1,5 @@
 name: Deploy to Server
 
-# 在前端/后端镜像构建完成后触发部署
 on:
   workflow_run:
     workflows:
@@ -17,8 +16,25 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # SCP推送 compose 文件到 /opt/pcb-web-platform
+      - name: Validate server credentials
+        id: validate_credentials
+        run: |
+          if [[ -z "${{ secrets.SERVER_HOST }}" ]]; then
+            echo "SERVER_HOST is not set"
+            exit 1
+          fi
+          if [[ -z "${{ secrets.SERVER_USERNAME }}" ]]; then
+            echo "SERVER_USERNAME is not set"
+            exit 1
+          fi
+          if [[ -z "${{ secrets.SERVER_PASSWORD }}" ]]; then
+            echo "SERVER_PASSWORD is not set"
+            exit 1
+          fi
+          echo "Credentials validated"
+
       - name: Transfer docker-compose config via SCP
+        id: transfer_config
         uses: appleboy/scp-action@master
         with:
           host: ${{ secrets.SERVER_HOST }}
@@ -28,8 +44,24 @@ jobs:
           source: "docker-compose.server.yml"
           target: "/opt/pcb-web-platform/"
 
-      # 远程执行部署脚本
+      - name: Check .env file exists on server
+        id: check_env
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USERNAME }}
+          port: ${{ secrets.SERVER_PORT }}
+          password: ${{ secrets.SERVER_PASSWORD }}
+          script: |
+            if [ ! -f /opt/pcb-web-platform/.env ]; then
+              echo "ERROR: .env file not found at /opt/pcb-web-platform/.env"
+              exit 1
+            else
+              echo ".env file exists"
+            fi
+
       - name: Remote deploy command
+        id: deploy
         uses: appleboy/ssh-action@master
         with:
           host: ${{ secrets.SERVER_HOST }}
@@ -38,13 +70,68 @@ jobs:
           password: ${{ secrets.SERVER_PASSWORD }}
           envs: ACR_USER,ACR_PWD,ACR_REG
           script: |
-            echo "$ACR_PWD" | docker login --username "$ACR_USER" --password-stdin "$ACR_REG"
+            set -e
+
+            echo "=== Step 1: Login to ACR ==="
+            if ! echo "$ACR_PWD" | docker login --username "$ACR_USER" --password-stdin "$ACR_REG"; then
+              echo "ERROR: Failed to login to ACR"
+              exit 1
+            fi
+            echo "ACR login successful"
+
+            echo "=== Step 2: Pull latest images ==="
             cd /opt/pcb-web-platform
-            docker compose -f docker-compose.server.yml pull
-            docker compose -f docker-compose.server.yml up -d
+            if ! docker compose -f docker-compose.server.yml pull; then
+              echo "ERROR: Failed to pull images"
+              exit 1
+            fi
+            echo "Images pulled successfully"
+
+            echo "=== Step 3: Start services ==="
+            if ! docker compose -f docker-compose.server.yml up -d; then
+              echo "ERROR: Failed to start services"
+              exit 1
+            fi
+            echo "Services started successfully"
+
+            echo "=== Step 4: Cleanup old images ==="
             docker image prune -f
+
+            echo "=== Step 5: Show service status ==="
+            docker compose -f docker-compose.server.yml ps
+
+            echo "=== Deployment completed ==="
         env:
           ACR_USER: ${{ secrets.ACR_USERNAME }}
           ACR_PWD: ${{ secrets.ACR_PASSWORD }}
           ACR_REG: ${{ secrets.ACR_REGISTRY }}
 
+      - name: Verify deployment
+        id: verify
+        if: ${{ steps.deploy.outputs.exit_code == 0 }}
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USERNAME }}
+          port: ${{ secrets.SERVER_PORT }}
+          password: ${{ secrets.SERVER_PASSWORD }}
+          script: |
+            echo "=== Verifying deployment ==="
+            sleep 10
+            
+            echo "Checking frontend..."
+            if curl -f http://localhost:80/ > /dev/null 2>&1; then
+              echo "Frontend is running"
+            else
+              echo "WARNING: Frontend not responding"
+            fi
+
+            echo "Checking backend health..."
+            if curl -f http://localhost:8000/api/health > /dev/null 2>&1; then
+              echo "Backend is running"
+            else
+              echo "WARNING: Backend not responding"
+            fi
+
+            echo "=== Container status ==="
+            docker compose -f docker-compose.server.yml ps
