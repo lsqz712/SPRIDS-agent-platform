@@ -2996,4 +2996,24 @@ $msg-bubble-tail-top: 14px;
     opacity: 1;
   }
 }
+
+.attach-btn {
+  padding: 6px 10px;
+  font-size: 16px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  opacity: 0.6;
+  flex-shrink: 0;
+
+  &:hover { opacity: 1; }
+}
+
+.msg-attach-preview {
+  max-width: 200px;
+  max-height: 150px;
+  border-radius: 8px;
+  object-fit: cover;
+  border: 1px solid rgba($phro-gold, 0.2);
+}
 </style>
