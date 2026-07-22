@@ -52,3 +52,27 @@ export function uploadAvatarApi(file) {
   formData.append('file', file)
   return request.post('/auth/me/avatar', formData)
 }
+
+/**
+ * 获取角色申请列表（管理员）
+ * @param {Object} params - { status? }
+ */
+export function getRoleApplicationsApi(params) {
+  return request.get('/roles/applications/', { params })
+}
+
+/**
+ * 获取当前用户的角色申请记录
+ */
+export function getMyRoleApplicationsApi() {
+  return request.get('/roles/me/applications')
+}
+
+/**
+ * 审批角色申请（管理员）
+ * @param {number} applicationId - 申请ID
+ * @param {Object} data - { status, comment? }
+ */
+export function approveRoleApplicationApi(applicationId, data) {
+  return request.post(`/roles/applications/${applicationId}/approve`, data)
+}

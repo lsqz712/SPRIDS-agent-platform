@@ -83,7 +83,7 @@ ROLES = [
     {
         "name": "viewer",
         "display_name": "普通访客",
-        "description": "仅可查看检测报告与统计信息，无操作权限",
+        "description": "仅可使用检测工作台和飞讯功能",
         "is_system": True,
     },
 ]
@@ -115,10 +115,11 @@ ROLE_PERMISSIONS = {
         "statistics:read",
     ],
     "viewer": [
+        "detection:create",
         "detection:read",
+        "detection:camera",
+        "detection:video",
         "scene:read",
-        "model:read",
-        "statistics:read",
     ],
 }
 

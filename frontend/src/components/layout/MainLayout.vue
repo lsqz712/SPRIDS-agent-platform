@@ -15,15 +15,6 @@
         <router-view />
       </main>
     </div>
-
-    <button
-      v-if="isDev"
-      type="button"
-      class="dev-exit-btn"
-      @click="exitToLogin"
-    >
-      返回登录
-    </button>
   </div>
 </template>
 

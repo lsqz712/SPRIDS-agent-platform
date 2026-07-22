@@ -92,8 +92,6 @@ import {
   Camera,
   Cpu,
   Clock,
-  DataAnalysis,
-  Document,
   Box,
   CollectionTag,
 } from '@element-plus/icons-vue'
@@ -118,15 +116,18 @@ const userAnchorRef = ref(null)
 
 const activeMenu = computed(() => `/${route.path.split('/')[1]}`)
 
-const navMenuItems = [
-  { path: '/detection', title: '检测工作台', icon: Camera },
-  { path: '/training', title: '模型训练', icon: Cpu },
-  { path: '/history', title: '历史记录', icon: Clock },
-  { path: '/tasks', title: '任务管理', icon: Document },
-  { path: '/batches', title: '批次管理', icon: Box },
-  { path: '/defect-types', title: '缺陷类型', icon: CollectionTag },
-  { path: '/dashboard', title: '数据看板', icon: DataAnalysis },
+const allMenuItems = [
+  { path: '/detection', title: '检测工作台', icon: Camera, roles: ['admin', 'operator', 'engineer', 'viewer'] },
+  { path: '/training', title: '模型训练', icon: Cpu, roles: ['admin', 'engineer'] },
+  { path: '/history', title: '历史记录', icon: Clock, roles: ['admin', 'operator', 'engineer'] },
+  { path: '/batches', title: '批次管理', icon: Box, roles: ['admin', 'operator', 'engineer'] },
+  { path: '/defect-types', title: '缺陷类型', icon: CollectionTag, roles: ['admin', 'operator', 'engineer'] },
 ]
+
+const navMenuItems = computed(() => {
+  const userRoles = userStore.roles || []
+  return allMenuItems.filter(item => item.roles.some(role => userRoles.includes(role)))
+})
 
 function goToChat() {
   if (!route.path.startsWith('/chat')) {

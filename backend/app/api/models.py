@@ -11,7 +11,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import desc
 from app.database.session import get_db
-from app.api.deps import get_current_user
+from app.api.deps import get_current_user, check_permission
 from app.api.utils import success_response
 from app.entity.db_models import User, ModelVersion, DetectionScene
 from app.entity.schemas import ModelVersionCreate, ModelVersionResponse
@@ -19,7 +19,7 @@ import os
 
 router = APIRouter(prefix="/api/models", tags=["模型管理"])
 
-@router.post("/versions", status_code=201)
+@router.post("/versions", status_code=201, dependencies=[Depends(check_permission("model:create"))])
 async def create_model_version(
     request: ModelVersionCreate,
     db: Session = Depends(get_db),
@@ -62,7 +62,7 @@ async def create_model_version(
         scene_name=scene.display_name
     ), message="模型版本创建成功")
 
-@router.get("/versions")
+@router.get("/versions", dependencies=[Depends(check_permission("model:read"))])
 async def get_model_versions(
     scene_id: int = None,
     status: str = None,
@@ -90,7 +90,7 @@ async def get_model_versions(
     
     return success_response(data=results)
 
-@router.get("/versions/{model_id}")
+@router.get("/versions/{model_id}", dependencies=[Depends(check_permission("model:read"))])
 async def get_model_version(
     model_id: int,
     db: Session = Depends(get_db),
@@ -107,7 +107,7 @@ async def get_model_version(
         scene_name=model.scene.display_name if model.scene else None
     ))
 
-@router.put("/versions/{model_id}")
+@router.put("/versions/{model_id}", dependencies=[Depends(check_permission("model:update"))])
 async def update_model_version(
     model_id: int,
     request: ModelVersionCreate,
@@ -149,7 +149,7 @@ async def update_model_version(
         scene_name=scene.display_name
     ), message="模型版本更新成功")
 
-@router.delete("/versions/{model_id}")
+@router.delete("/versions/{model_id}", dependencies=[Depends(check_permission("model:delete"))])
 async def delete_model_version(
     model_id: int,
     db: Session = Depends(get_db),
@@ -164,7 +164,7 @@ async def delete_model_version(
     
     return success_response(message="模型版本已删除")
 
-@router.put("/versions/{model_id}/set-default")
+@router.put("/versions/{model_id}/set-default", dependencies=[Depends(check_permission("model:update"))])
 async def set_default_model(
     model_id: int,
     db: Session = Depends(get_db),

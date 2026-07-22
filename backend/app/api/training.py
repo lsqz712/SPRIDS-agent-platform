@@ -4,6 +4,8 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
+from app.api.auth import get_current_user
+from app.api.deps import check_permission
 from app.database.session import get_db
 from app.entity.schemas import TrainingTaskCreate, TrainingTaskResponse, TrainingMetricResponse
 from app.entity.db_models import TrainingTask, TrainingMetric
@@ -34,12 +36,14 @@ def serialize_training_task(task: TrainingTask) -> dict:
     }
 
 
-@router.post("/tasks", response_model=TrainingTaskResponse, status_code=201)
+@router.post("/tasks", response_model=TrainingTaskResponse, status_code=201, dependencies=[Depends(check_permission("model:train"))])
 async def create_training_task(
     request: TrainingTaskCreate,
     db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
 ):
     task = TrainingTask(
+        user_id=current_user.id,
         scene_id=request.scene_id,
         model_name=request.model_name,
         epochs=request.epochs,
@@ -55,22 +59,22 @@ async def create_training_task(
     return serialize_training_task(task)
 
 
-@router.get("/tasks", response_model=list[TrainingTaskResponse])
-async def list_training_tasks(db: Session = Depends(get_db)):
+@router.get("/tasks", response_model=list[TrainingTaskResponse], dependencies=[Depends(check_permission("model:read"))])
+async def list_training_tasks(db: Session = Depends(get_db), current_user=Depends(get_current_user)):
     tasks = db.query(TrainingTask).order_by(TrainingTask.created_at.desc()).all()
     return [serialize_training_task(task) for task in tasks]
 
 
-@router.get("/status/{task_id}")
-async def get_training_status(task_id: int, db: Session = Depends(get_db)):
+@router.get("/status/{task_id}", dependencies=[Depends(check_permission("model:read"))])
+async def get_training_status(task_id: int, db: Session = Depends(get_db), current_user=Depends(get_current_user)):
     task = db.query(TrainingTask).filter(TrainingTask.id == task_id).first()
     if not task:
         raise HTTPException(status_code=404, detail="训练任务不存在")
     return serialize_training_task(task)
 
 
-@router.get("/tasks/{task_id}/metrics", response_model=list[TrainingMetricResponse])
-async def get_training_metrics(task_id: int, db: Session = Depends(get_db)):
+@router.get("/tasks/{task_id}/metrics", response_model=list[TrainingMetricResponse], dependencies=[Depends(check_permission("model:read"))])
+async def get_training_metrics(task_id: int, db: Session = Depends(get_db), current_user=Depends(get_current_user)):
     task = db.query(TrainingTask).filter(TrainingTask.id == task_id).first()
     if not task:
         raise HTTPException(status_code=404, detail="训练任务不存在")

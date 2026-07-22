@@ -14,13 +14,11 @@ from app.api.detection import router as detection_router
 from app.api.training import router as training_router
 from app.api.history import router as history_router
 from app.api.storage import router as storage_router
-from app.api.tasks import router as tasks_router
 from app.api.batch import router as batch_router
 from app.api.statistics import router as statistics_router
 from app.api.defect_types import router as defect_types_router
 from app.api.results import router as results_router
 from app.api.websocket import router as websocket_router
-from app.api.dashboard import router as dashboard_router
 from app.api.user import router as user_router
 from app.api.knowledge import router as knowledge_router
 from app.api.roles import router as roles_router
@@ -83,13 +81,11 @@ app.include_router(scenes_router)
 app.include_router(training_router)
 app.include_router(history_router)
 app.include_router(storage_router)
-app.include_router(tasks_router)
 app.include_router(batch_router)
 app.include_router(statistics_router)
 app.include_router(defect_types_router)
 app.include_router(results_router)
 app.include_router(websocket_router)
-app.include_router(dashboard_router)
 app.include_router(user_router)
 app.include_router(knowledge_router)
 app.include_router(roles_router)

@@ -37,9 +37,11 @@
             </div>
           </div>
         </div>
-        <span class="profile-status" :class="{ 'is-muted': profile.is_active === false }">
-          {{ profile.is_active === false ? '账号已禁用' : '账号正常' }}
-        </span>
+        <div class="profile-status-group">
+          <span class="profile-status" :class="{ 'is-muted': profile.is_active === false }">
+            {{ profile.is_active === false ? '账号已禁用' : '账号正常' }}
+          </span>
+        </div>
       </header>
 
       <div class="profile-grid">
@@ -124,6 +126,87 @@
                 <span>若发现异常登录，请立即修改密码并联系管理员</span>
               </li>
             </ul>
+          </div>
+        </section>
+
+        <section v-if="roleApplications.length > 0" class="profile-block">
+          <div class="profile-block-head">
+            <div>
+              <h3 class="phro-module-title">角色申请记录</h3>
+              <p class="profile-block-desc">查看您的角色申请状态</p>
+            </div>
+          </div>
+          <div class="role-applications">
+            <div
+              v-for="app in roleApplications"
+              :key="app.id"
+              class="role-application-item"
+            >
+              <div class="role-application-info">
+                <span class="role-name">{{ getRoleLabel(app.role_name) }}</span>
+                <span class="status-badge" :class="`status-${app.status}`">
+                  {{ getStatusLabel(app.status) }}
+                </span>
+              </div>
+              <div class="role-application-meta">
+                <span>申请时间：{{ formatTime(app.applied_at) }}</span>
+                <span v-if="app.approved_at">审批时间：{{ formatTime(app.approved_at) }}</span>
+              </div>
+              <div v-if="app.approve_comment" class="role-application-comment">
+                <span>审批意见：{{ app.approve_comment }}</span>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section v-if="userStore.isSuperuser" class="profile-block">
+          <div class="profile-block-head">
+            <div>
+              <h3 class="phro-module-title">用户注册审批</h3>
+              <p class="profile-block-desc">审批其他用户的角色申请</p>
+            </div>
+            <button type="button" class="phro-btn phro-btn--sm" :disabled="loadingApproval" @click="refreshApprovalList">
+              {{ loadingApproval ? '刷新中…' : '刷新列表' }}
+            </button>
+          </div>
+          <div class="approval-list">
+            <div v-if="approvalList.length === 0" class="approval-empty">
+              <span>暂无待审批的用户申请</span>
+            </div>
+            <div
+              v-for="app in approvalList"
+              :key="app.id"
+              class="approval-item"
+            >
+              <div class="approval-info">
+                <div class="approval-user">
+                  <span class="approval-username">{{ app.username }}</span>
+                  <span class="approval-email">{{ app.email }}</span>
+                </div>
+                <span class="approval-role">{{ getRoleLabel(app.role_name) }}</span>
+              </div>
+              <div class="approval-meta">
+                <span>申请时间：{{ formatTime(app.applied_at) }}</span>
+              </div>
+              <div class="approval-actions">
+                <button
+                  type="button"
+                  class="phro-btn phro-btn--sm phro-btn--success"
+                  :disabled="app.status !== 'pending'"
+                  @click="handleApprove(app)"
+                >
+                  通过
+                </button>
+                <button
+                  type="button"
+                  class="phro-btn phro-btn--sm phro-btn--danger"
+                  :disabled="app.status !== 'pending'"
+                  @click="handleReject(app)"
+                >
+                  拒绝
+                </button>
+              </div>
+            </div>
           </div>
         </section>
       </div>
@@ -275,6 +358,7 @@ import request from '@/utils/request'
 import { useUserStore } from '@/stores/user'
 import { showPhroConfirm } from '@/utils/phroMessageBox'
 import { AVATAR_ACCEPT, validateAvatarFile } from '@/utils/avatar'
+import { getMyRoleApplicationsApi, getRoleApplicationsApi, approveRoleApplicationApi } from '@/api/auth'
 
 const router = useRouter()
 const userStore = useUserStore()
@@ -310,6 +394,9 @@ const profileDialogVisible = ref(false)
 const passwordDialogVisible = ref(false)
 const profileFormRef = ref(null)
 const passwordFormRef = ref(null)
+const roleApplications = ref([])
+const approvalList = ref([])
+const loadingApproval = ref(false)
 
 const ROLE_LABELS = {
   admin: '管理员',
@@ -386,6 +473,19 @@ watch(profile, syncProfileForm, { immediate: true, deep: true })
 function formatTime(value) {
   if (!value) return '—'
   return new Date(value).toLocaleString('zh-CN')
+}
+
+function getRoleLabel(role) {
+  return ROLE_LABELS[role] || role
+}
+
+function getStatusLabel(status) {
+  const labels = {
+    pending: '待审批',
+    approved: '已通过',
+    rejected: '已拒绝',
+  }
+  return labels[status] || status
 }
 
 function openProfileDialog() {
@@ -532,7 +632,65 @@ onMounted(() => {
   if (userStore.token && userStore.token !== 'dev-preview' && !userStore.user?.email) {
     refreshProfile()
   }
+  fetchRoleApplications()
+  if (userStore.isSuperuser) {
+    refreshApprovalList()
+  }
 })
+
+async function fetchRoleApplications() {
+  if (userStore.token === 'dev-preview') return
+  try {
+    const response = await getMyRoleApplicationsApi()
+    roleApplications.value = response.data || []
+  } catch {
+    // 拦截器已提示
+  }
+}
+
+async function refreshApprovalList() {
+  if (userStore.token === 'dev-preview') return
+  loadingApproval.value = true
+  try {
+    const response = await getRoleApplicationsApi({ status: 'pending' })
+    approvalList.value = response.data || []
+  } catch {
+    // 拦截器已提示
+  } finally {
+    loadingApproval.value = false
+  }
+}
+
+async function handleApprove(application) {
+  try {
+    await showPhroConfirm(`确定要通过 ${application.username} 的角色申请吗？`, '通过申请', {
+      confirmButtonText: '通过',
+      cancelButtonText: '取消',
+    })
+    await approveRoleApplicationApi(application.id, { status: 'approved' })
+    ElMessage.success('已通过申请')
+    refreshApprovalList()
+    fetchRoleApplications()
+  } catch {
+    // 用户取消或失败
+  }
+}
+
+async function handleReject(application) {
+  try {
+    await showPhroConfirm(`确定要拒绝 ${application.username} 的角色申请吗？`, '拒绝申请', {
+      confirmButtonText: '拒绝',
+      cancelButtonText: '取消',
+      type: 'warning',
+    })
+    await approveRoleApplicationApi(application.id, { status: 'rejected' })
+    ElMessage.success('已拒绝申请')
+    refreshApprovalList()
+    fetchRoleApplications()
+  } catch {
+    // 用户取消或失败
+  }
+}
 </script>
 
 <style lang="scss" scoped>
@@ -635,6 +793,12 @@ onMounted(() => {
   gap: 6px;
 }
 
+.profile-status-group {
+  display: flex;
+  flex-shrink: 0;
+  gap: 8px;
+}
+
 .profile-status {
   flex-shrink: 0;
   font-size: 12px;
@@ -648,6 +812,12 @@ onMounted(() => {
     background: rgba($phro-rose, 0.1);
     border-color: rgba($phro-rose, 0.35);
     color: $phro-rose;
+  }
+
+  &--pending {
+    background: rgba(232, 184, 109, 0.15);
+    border-color: rgba(232, 184, 109, 0.4);
+    color: #e8b86d;
   }
 }
 
@@ -816,6 +986,155 @@ onMounted(() => {
   color: $phro-cream;
   background: linear-gradient(135deg, rgba($phro-rose, 0.9), rgba($phro-crimson, 0.95));
   border-color: rgba($phro-gold, 0.35);
+}
+
+.role-applications {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.role-application-item {
+  padding: 12px 14px;
+  background: rgba($phro-rose, 0.04);
+  border: 1px solid rgba($phro-rose, 0.12);
+  border-radius: $phro-radius-sm;
+}
+
+.role-application-info {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 6px;
+
+  .role-name {
+    font-size: 13px;
+    font-weight: 500;
+    color: $phro-text-deep;
+  }
+}
+
+.status-badge {
+  font-size: 11px;
+  padding: 3px 10px;
+  border-radius: 999px;
+
+  &.status-pending {
+    background: rgba(232, 184, 109, 0.15);
+    border: 1px solid rgba(232, 184, 109, 0.35);
+    color: #e8b86d;
+  }
+
+  &.status-approved {
+    background: rgba(100, 180, 120, 0.15);
+    border: 1px solid rgba(100, 180, 120, 0.35);
+    color: #64b478;
+  }
+
+  &.status-rejected {
+    background: rgba($phro-rose, 0.1);
+    border: 1px solid rgba($phro-rose, 0.3);
+    color: $phro-rose;
+  }
+}
+
+.role-application-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 11px;
+  color: $phro-text-mid;
+}
+
+.role-application-comment {
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px solid rgba($phro-rose, 0.08);
+  font-size: 11px;
+  color: $phro-text-mid;
+  font-style: italic;
+}
+
+.approval-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.approval-empty {
+  padding: 20px;
+  text-align: center;
+  font-size: 13px;
+  color: $phro-text-mid;
+  background: rgba($phro-rose, 0.03);
+  border-radius: $phro-radius-sm;
+}
+
+.approval-item {
+  padding: 12px 14px;
+  background: rgba($phro-rose, 0.04);
+  border: 1px solid rgba($phro-rose, 0.12);
+  border-radius: $phro-radius-sm;
+}
+
+.approval-info {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 6px;
+}
+
+.approval-user {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+
+  .approval-username {
+    font-size: 13px;
+    font-weight: 500;
+    color: $phro-text-deep;
+  }
+
+  .approval-email {
+    font-size: 11px;
+    color: $phro-text-mid;
+  }
+}
+
+.approval-role {
+  flex-shrink: 0;
+  font-size: 12px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: rgba($phro-gold, 0.15);
+  border: 1px solid rgba($phro-gold, 0.35);
+  color: $phro-text-deep;
+}
+
+.approval-meta {
+  font-size: 11px;
+  color: $phro-text-mid;
+  margin-bottom: 10px;
+}
+
+.approval-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+
+  .phro-btn--success {
+    color: #fff;
+    background: linear-gradient(135deg, rgba(100, 180, 120, 0.9), rgba(80, 160, 100, 0.95));
+    border-color: rgba(100, 180, 120, 0.4);
+  }
+
+  .phro-btn--danger {
+    color: $phro-cream;
+    background: linear-gradient(135deg, rgba($phro-rose, 0.9), rgba($phro-crimson, 0.95));
+    border-color: rgba($phro-gold, 0.35);
+  }
 }
 
 @media (max-width: 900px) {

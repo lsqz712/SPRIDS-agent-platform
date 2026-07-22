@@ -35,7 +35,7 @@ logger = get_logger(__name__)
 router = APIRouter(prefix="/api/detection", tags=["快捷检测"])
 
 
-@router.get("/scenes", response_model=list[SceneResponse])
+@router.get("/scenes", response_model=list[SceneResponse], dependencies=[Depends(check_permission("scene:read"))])
 async def get_detection_scenes(
     category: str = None,
     is_active: bool = None,
@@ -60,7 +60,7 @@ async def get_detection_scenes(
     return results
 
 
-@router.post("/single", summary="单图检测")
+@router.post("/single", summary="单图检测", dependencies=[Depends(check_permission("detection:create"))])
 async def detect_single_api(
     file: UploadFile = File(..., description="检测图⽚"),
     conf: float = Form(0.25, description="置信度阈值"),
@@ -87,7 +87,7 @@ async def detect_single_api(
         os.unlink(tmp_path)
 
 
-@router.post("/batch", summary="批量检测")
+@router.post("/batch", summary="批量检测", dependencies=[Depends(check_permission("detection:create"))])
 async def detect_batch_api(
     files: list[UploadFile] = File(..., description="多张图⽚"),
     conf: float = Form(0.25),
@@ -119,7 +119,7 @@ async def detect_batch_api(
                 pass
 
 
-@router.post("/zip", summary="ZIP ⽂件检测")
+@router.post("/zip", summary="ZIP ⽂件检测", dependencies=[Depends(check_permission("detection:create"))])
 async def detect_zip_api(
     file: UploadFile = File(..., description="ZIP 压缩包"),
     conf: float = Form(0.25),
@@ -145,7 +145,7 @@ async def detect_zip_api(
         os.unlink(tmp_path)
 
 
-@router.get("/status/{task_id}", summary="查询检测任务状态")
+@router.get("/status/{task_id}", summary="查询检测任务状态", dependencies=[Depends(check_permission("detection:read"))])
 async def get_detection_status(
     task_id: int,
     db: Session = Depends(get_db),
@@ -166,7 +166,7 @@ async def get_detection_status(
     }
 
 
-@router.post("/video", summary="视频检测")
+@router.post("/video", summary="视频检测", dependencies=[Depends(check_permission("detection:video"))])
 async def detect_video_api(
     file: UploadFile = File(..., description="视频文件"),
     conf: float = Form(0.25),
@@ -238,8 +238,8 @@ async def detect_video_api(
     }
 
 
-@router.get("/video/status/{task_id}", summary="查询视频检测进度")
-async def get_video_detection_status(task_id: int, db: Session = Depends(get_db)):
+@router.get("/video/status/{task_id}", summary="查询视频检测进度", dependencies=[Depends(check_permission("detection:read"))])
+async def get_video_detection_status(task_id: int, db: Session = Depends(get_db), current_user=Depends(get_current_user)):
     """查询视频检测任务进度（Redis优先 → DB回退）."""
     cached = redis_client.get_json(f"video_task:{task_id}")
     if cached:
@@ -252,7 +252,7 @@ async def get_video_detection_status(task_id: int, db: Session = Depends(get_db)
     }
 
 
-@router.get("/cameras", summary="枚举摄像头设备")
+@router.get("/cameras", summary="枚举摄像头设备", dependencies=[Depends(check_permission("detection:camera"))])
 async def list_camera_devices_api(
     current_user=Depends(get_current_user),
 ):
@@ -264,7 +264,7 @@ async def list_camera_devices_api(
     }
 
 
-@router.get("/tasks/{task_id}", summary="获取检测任务详情")
+@router.get("/tasks/{task_id}", summary="获取检测任务详情", dependencies=[Depends(check_permission("detection:read"))])
 async def get_detection_task_detail(
     task_id: int,
     db: Session = Depends(get_db),
@@ -306,7 +306,7 @@ async def get_detection_task_detail(
     }
 
 
-@router.get("/list", summary="获取检测任务列表")
+@router.get("/list", summary="获取检测任务列表", dependencies=[Depends(check_permission("detection:read"))])
 async def list_detection_tasks(
     page: int = 1,
     page_size: int = 20,

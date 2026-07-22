@@ -7,6 +7,7 @@ from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 
 from app.api.auth import get_current_user
+from app.api.deps import check_permission
 from app.core.logger import get_logger
 from app.database.session import get_db
 from app.services.history_service import history_service
@@ -16,7 +17,7 @@ logger = get_logger(__name__)
 router = APIRouter(prefix="/api/history", tags=["历史记录"])
 
 
-@router.get("/records")
+@router.get("/records", dependencies=[Depends(check_permission("detection:read"))])
 async def get_history_records(
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
@@ -40,7 +41,7 @@ async def get_history_records(
     }
 
 
-@router.get("/statistics")
+@router.get("/statistics", dependencies=[Depends(check_permission("statistics:read"))])
 async def get_history_statistics(
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
@@ -49,7 +50,7 @@ async def get_history_statistics(
     return history_service.get_history_statistics(db=db)
 
 
-@router.get("/tasks/{task_id}")
+@router.get("/tasks/{task_id}", dependencies=[Depends(check_permission("detection:read"))])
 async def get_task_detail(
     task_id: int,
     db: Session = Depends(get_db),
@@ -83,7 +84,7 @@ async def get_task_detail(
     }
 
 
-@router.delete("/tasks/{task_id}")
+@router.delete("/tasks/{task_id}", dependencies=[Depends(check_permission("detection:delete"))])
 async def delete_task(
     task_id: int,
     db: Session = Depends(get_db),
