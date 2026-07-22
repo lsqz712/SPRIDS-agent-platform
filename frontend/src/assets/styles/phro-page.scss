@@ -1,0 +1,243 @@
+@use './variables.scss' as *;
+@use './phro-theme.scss' as phro;
+
+.phro-page {
+  flex: 1;
+  min-height: 0;
+  height: 100%;
+  display: flex;
+  font-family: $font-family-phro;
+}
+
+.phro-page-window {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: $phro-module-gap;
+  padding: $phro-window-padding;
+  overflow: hidden;
+  @include phro.phro-glass-window;
+}
+
+.phro-module,
+.phro-card {
+  @include phro.phro-module-box;
+  padding: $phro-window-padding;
+  min-height: 0;
+
+  &--grow {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  &--flat {
+    background: transparent;
+    border: none;
+    padding: 0;
+  }
+}
+
+.phro-page-header {
+  flex-shrink: 0;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: $spacing-md;
+  flex-wrap: wrap;
+  min-width: 0;
+
+  h2 {
+    font-size: 18px;
+    font-weight: 600;
+    color: $phro-text-deep;
+    margin: 0 0 4px;
+    letter-spacing: 0.04em;
+  }
+
+  p {
+    margin: 0;
+    font-size: 12px;
+    color: $phro-text-mid;
+  }
+}
+
+.phro-page-header-main {
+  min-width: 0;
+  flex: 1 1 200px;
+}
+
+.phro-page-header-actions {
+  min-width: 0;
+  flex: 0 1 auto;
+  max-width: 100%;
+}
+
+.phro-page-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: $phro-module-gap;
+  overflow: hidden;
+
+  &--scroll {
+    overflow-y: auto;
+
+    &::-webkit-scrollbar {
+      width: 4px;
+    }
+
+    &::-webkit-scrollbar-thumb {
+      background: rgba($phro-gold, 0.35);
+      border-radius: 2px;
+    }
+  }
+}
+
+.phro-module-title,
+.phro-card-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: $phro-text-deep;
+  margin: 0 0 10px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid rgba($phro-rose, 0.22);
+  flex-shrink: 0;
+}
+
+.phro-module-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.phro-btn {
+  @include phro.phro-btn-base;
+  padding: 8px 16px;
+  font-size: 13px;
+
+  &--primary {
+    background: linear-gradient(135deg, rgba($phro-rose, 0.85), rgba($phro-crimson, 0.9));
+    color: $phro-cream;
+    border-color: rgba($phro-gold, 0.45);
+
+    &:hover:not(:disabled) {
+      border-color: rgba($phro-gold, 0.7);
+      box-shadow: 0 0 12px rgba($phro-gold, 0.25);
+    }
+  }
+
+  &--sm {
+    padding: 5px 12px;
+    font-size: 12px;
+  }
+}
+
+.phro-tabs {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.phro-tab {
+  @include phro.phro-btn-base;
+  padding: 7px 14px;
+  font-size: 13px;
+
+  &.active {
+    @include phro.phro-selected-accent;
+    color: $phro-text-deep;
+  }
+}
+
+.phro-stat-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: $phro-module-gap;
+  flex-shrink: 0;
+}
+
+.phro-stat-item {
+  @include phro.phro-module-box;
+  padding: 10px 12px;
+  text-align: center;
+
+  .value {
+    font-size: 20px;
+    font-weight: 700;
+    color: $phro-text-deep;
+    line-height: 1.2;
+  }
+
+  .label {
+    font-size: 11px;
+    color: $phro-text-mid;
+    margin-top: 4px;
+  }
+}
+
+.phro-table-wrap {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+
+  :deep(.el-table) {
+    --el-table-bg-color: transparent;
+    --el-table-tr-bg-color: rgba($phro-panel-bg, 0.92);
+    --el-table-header-bg-color: rgba($phro-panel-bg, 0.98);
+    --el-table-row-hover-bg-color: rgba($phro-gold, 0.12);
+    --el-table-text-color: #{$phro-text-deep};
+    --el-table-header-text-color: #{$phro-text-deep};
+    border-radius: $phro-radius-sm;
+    overflow: hidden;
+    font-family: inherit;
+  }
+
+  :deep(.el-table th.el-table__cell) {
+    font-weight: 600;
+  }
+}
+
+.phro-form-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px 16px;
+}
+
+.phro-field {
+  label {
+    display: block;
+    font-size: 12px;
+    color: $phro-text-mid;
+    margin-bottom: 6px;
+  }
+}
+
+.phro-empty {
+  text-align: center;
+  padding: 32px 16px;
+  color: $phro-text-mid;
+  font-size: 13px;
+}
+
+.phro-tag {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: $phro-radius-sm;
+  font-size: 11px;
+  background: rgba($phro-rose, 0.08);
+  color: $phro-text-deep;
+  border: 1px solid rgba($phro-rose, 0.28);
+}
+
+.el-avatar {
+  --el-avatar-bg-color: #{$phro-panel-bg};
+}
+
+.phro-panel-sections {
+  @include phro.phro-panel-sections;
+}

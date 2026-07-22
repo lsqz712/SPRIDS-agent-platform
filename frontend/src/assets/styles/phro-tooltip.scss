@@ -1,0 +1,24 @@
+@use './variables.scss' as *;
+@use './phro-theme.scss' as phro;
+
+.phro-tooltip.el-popper {
+  background: $phro-panel-bg !important;
+  border: $phro-divider-width solid $phro-border !important;
+  border-radius: $phro-radius-sm !important;
+  padding: 6px 10px !important;
+  font-family: $font-family-phro;
+  font-size: 12px;
+  line-height: 1.45;
+  color: $phro-text-deep !important;
+  box-shadow: 0 8px 24px rgba(40, 0, 12, 0.28);
+  max-width: 220px;
+
+  .el-popper__arrow::before {
+    background: $phro-panel-bg !important;
+    border: $phro-divider-width solid $phro-border !important;
+  }
+}
+
+.phro-tooltip--danger.el-popper {
+  color: $phro-rose !important;
+}

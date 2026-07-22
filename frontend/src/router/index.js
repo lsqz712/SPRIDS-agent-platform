@@ -1,11 +1,11 @@
 /**
  * Vue Router 路由配置
- * - 登录/注册⻚⾯⽆需认证
- * - 其他⻚⾯需要登录后才能访问
- * - 路由守卫⾃动检查登录状态
+ * - 登录/注册页面无需认证
+ * - 其他页面需要登录后才能访问
+ * - 路由守卫自动检查登录状态
  */
 import { createRouter, createWebHistory } from 'vue-router'
-// ── 路由定义 ────────────────────────────────────────
+
 const routes = [
   {
     path: '/login',
@@ -19,7 +19,6 @@ const routes = [
     component: () => import('@/views/RegisterPage.vue'),
     meta: { title: '注册', requiresAuth: false },
   },
-// ── 需要登录的⻚⾯（使⽤ MainLayout 布局） ──────
   {
     path: '/',
     component: () => import('@/components/layout/MainLayout.vue'),
@@ -30,64 +29,98 @@ const routes = [
         path: 'chat',
         name: 'Chat',
         component: () => import('@/views/ChatPage.vue'),
-        meta: { title: '智能对话', icon: 'ChatDotRound' },
+        meta: { title: '智能对话', icon: 'ChatDotRound', roles: ['admin', 'operator', 'engineer', 'viewer'] },
       },
       {
         path: 'detection',
         name: 'Detection',
         component: () => import('@/views/DetectionPage.vue'),
-        meta: { title: '检测⼯作台', icon: 'Camera' },
+        meta: { title: '检测工作台', icon: 'Camera', roles: ['admin', 'operator', 'viewer'] },
       },
       {
         path: 'training',
         name: 'Training',
         component: () => import('@/views/TrainingPage.vue'),
-        meta: { title: '模型训练', icon: 'Cpu' },
+        meta: { title: '模型训练', icon: 'Cpu', roles: ['admin', 'engineer'] },
       },
       {
         path: 'history',
         name: 'History',
         component: () => import('@/views/HistoryPage.vue'),
-        meta: { title: '历史记录', icon: 'Clock' },
+        meta: { title: '历史记录', icon: 'Clock', roles: ['admin', 'operator'] },
       },
       {
         path: 'dashboard',
         name: 'Dashboard',
         component: () => import('@/views/DashboardPage.vue'),
-        meta: { title: '数据看板', icon: 'DataAnalysis' },
+        meta: { title: '数据看板', icon: 'DataAnalysis', roles: ['admin', 'operator', 'engineer'] },
+      },
+      {
+        path: 'batches',
+        name: 'Batches',
+        component: () => import('@/views/BatchesPage.vue'),
+        meta: { title: '批次管理', icon: 'Package', roles: ['admin', 'operator'] },
+      },
+      {
+        path: 'defect-types',
+        name: 'DefectTypes',
+        component: () => import('@/views/DefectTypesPage.vue'),
+        meta: { title: '缺陷类型', icon: 'Tags', roles: ['admin', 'engineer'] },
+      },
+      {
+        path: 'role-approvals',
+        name: 'RoleApprovals',
+        component: () => import('@/views/RoleApprovalsPage.vue'),
+        meta: { title: '角色审批', icon: 'Checked', roles: ['admin'] },
+      },
+      {
+        path: 'profile',
+        name: 'Profile',
+        component: () => import('@/views/ProfilePage.vue'),
+        meta: { title: '个人中心', icon: 'User' },
       },
     ],
   },
-// ── 404 ⻚⾯ ─────────────────────────────────────
   {
     path: '/:pathMatch(.*)*',
     redirect: '/login',
   },
 ]
-// ── 创建路由实例 ──────────────────────────────────────
+
 const router = createRouter({
   history: createWebHistory(),
   routes,
 })
-// ── 路由守卫 ────────────────────────────────────────
+
 router.beforeEach((to, from, next) => {
-// 设置⻚⾯标题
   document.title = to.meta.title
-    ? `${to.meta.title} - SPRIDS Agent Platform`
-    : 'SPRIDS Agent Platform'
-// 检查是否需要认证
+    ? `${to.meta.title} - Phrolova SPRIDS Agent Platform`
+    : 'Phrolova SPRIDS Agent Platform'
+
   const token = localStorage.getItem('SPRIDS_token')
-  const requiresAuth = to.matched.some((record) => record.meta.requiresAuth !== false)
+  const requiresAuth = to.matched.some(
+    (record) => record.meta.requiresAuth !== false,
+  )
+
   if (requiresAuth && !token) {
-// 需要登录但未登录，跳转到登录⻚
     next({ path: '/login', query: { redirect: to.fullPath } })
-  } 
-  else if ((to.path === '/login' || to.path === '/register') && token) {
-// 已登录⽤户访问登录/注册⻚，跳转到⾸⻚
-    next('/')
-  } 
-  else {
-    next()
+    return
   }
+
+  if ((to.path === '/login' || to.path === '/register') && token) {
+    next('/')
+    return
+  }
+
+  const userRoles = JSON.parse(localStorage.getItem('SPRIDS_user') || '{}').roles || []
+  const routeRoles = to.meta.roles || []
+
+  if (routeRoles.length > 0 && !routeRoles.some(role => userRoles.includes(role))) {
+    next('/detection')
+    return
+  }
+
+  next()
 })
+
 export default router

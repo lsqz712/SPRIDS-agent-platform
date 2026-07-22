@@ -1,0 +1,71 @@
+@use './variables.scss' as *;
+@use './phro-theme.scss' as phro;
+
+.phro-dropdown.el-popper {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  padding: 0;
+
+  .el-popper__arrow::before {
+    background: $phro-panel-bg !important;
+    border: $phro-divider-width solid $phro-border !important;
+  }
+}
+
+.phro-dropdown .el-dropdown-menu {
+  background: $phro-panel-bg;
+  border: $phro-divider-width solid $phro-border;
+  border-radius: $phro-radius;
+  padding: 6px;
+  min-width: 148px;
+  font-family: $font-family-phro;
+  box-shadow: 0 12px 40px rgba(40, 0, 12, 0.35);
+}
+
+.phro-dropdown .el-dropdown-menu__item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  margin: 2px 0;
+  border-radius: $phro-radius-sm;
+  color: $phro-text-deep;
+  font-size: 14px;
+  line-height: 1.4;
+  transition: box-shadow 0.2s, border-color 0.2s, color 0.2s;
+
+  .el-icon {
+    font-size: 16px;
+    color: rgba($phro-gold, 0.82);
+  }
+
+  &:not(.is-disabled):focus,
+  &:not(.is-disabled):hover {
+    background: $phro-panel-bg;
+    color: $phro-text-deep;
+    border-color: transparent;
+    box-shadow:
+      inset 3px 0 0 rgba($phro-gold, 0.9),
+      0 0 0 1px rgba($phro-gold, 0.22);
+  }
+
+  &.phro-dropdown-item--danger:not(.is-disabled):focus,
+  &.phro-dropdown-item--danger:not(.is-disabled):hover {
+    color: $phro-rose;
+    background: $phro-panel-bg;
+
+    .el-icon {
+      color: $phro-rose;
+    }
+  }
+}
+
+.phro-dropdown .el-dropdown-menu__item--divided {
+  margin-top: 6px;
+  border-top: 1px solid rgba($phro-rose, 0.22);
+
+  &::before {
+    display: none;
+  }
+}

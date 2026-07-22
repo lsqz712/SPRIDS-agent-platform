@@ -1,432 +1,953 @@
 <template>
-  <div class="detection-page">
-    <div class="page-header">
-      <h2>检测工作台</h2>
-      <el-radio-group v-model="mode" size="default">
-        <el-radio-button value="single">单图</el-radio-button>
-        <el-radio-button value="batch">批量</el-radio-button>
-        <el-radio-button value="video">视频</el-radio-button>
-        <el-radio-button value="camera">摄像头</el-radio-button>
-      </el-radio-group>
-    </div>
-
-    <!-- ========== 图片/视频上传区域（非 Camera 模式）========== -->
-    <el-card v-if="mode !== 'camera'" shadow="never" style="margin-bottom:16px">
-      <template #header>
-        <div style="display:flex;justify-content:space-between;align-items:center">
-          <span>上传</span>
-          <el-button v-if="mode==='batch'" size="small" @click="uploadFolder">上传文件夹</el-button>
-        </div>
-      </template>
-      <input ref="folderInputRef" type="file" webkitdirectory multiple style="position:absolute;opacity:0;width:0;height:0" @change="handleFolder" />
-      <el-upload
-        drag
-        :auto-upload="false"
-        :on-change="handleFile"
-        :multiple="mode === 'batch'"
-        :accept="mode === 'video' ? 'video/*' : mode === 'batch' ? 'image/*,.zip' : 'image/*'"
-      >
-        <el-icon style="font-size:48px;color:#c0c4cc"><UploadFilled /></el-icon>
-        <div style="margin-top:8px">拖拽或 <em>点击上传</em> {{ mode }} 文件</div>
-      </el-upload>
-      <div v-if="mode === 'batch' && batchFiles.length" style="margin-top:8px">
-        <el-tag v-for="(f,i) in batchFiles" :key="i" closable @close="batchFiles.splice(i,1)" style="margin:4px">{{ f.name }}</el-tag>
-      </div>
-      <div v-else-if="currentFile" style="margin-top:8px">
-        <el-tag closable @close="currentFile=null">{{ currentFile.name }}</el-tag>
-      </div>
-      <el-divider />
-      <div class="param-row"><span>置信度</span><el-slider v-model="conf" :min="0.05" :max="0.95" :step="0.05" show-input /></div>
-      <el-button type="primary" style="width:100%;margin-top:8px" @click="runDetect" :loading="detecting" :disabled="!currentFile && !batchFiles.length">
-        {{ mode === 'video' ? '上传并检测' : '开始检测' }}
-      </el-button>
-    </el-card>
-
-    <!-- ========== Camera 模式 ========== -->
-    <template v-if="mode === 'camera'">
-      <div class="main-content">
-        <div class="preview-panel">
-          <div class="video-wrapper">
-            <video ref="videoRef" autoplay playsinline muted style="display:none"></video>
-            <canvas ref="canvasRef" class="preview-canvas" :width="canvasWidth" :height="canvasHeight"></canvas>
-            <div v-if="!cameraOn" class="placeholder"><p>点击下方按钮开启摄像头</p></div>
-          </div>
-          <div v-if="cameraOn" class="video-stats">
-            <el-tag type="success">FPS: {{ cameraFps }}</el-tag>
-            <el-tag type="info">帧: {{ camFrameCount }}</el-tag>
-            <el-tag type="info">推理: {{ camInferenceTime }}ms</el-tag>
-          </div>
-        </div>
-        <div class="result-panel">
-          <el-card class="stats-card" shadow="never">
-            <template #header><span>实时检测统计</span></template>
-            <div class="stats-grid">
-              <div class="stat-item"><div class="stat-value">{{ camObjectCount }}</div><div class="stat-label">当前目标数</div></div>
-              <div class="stat-item"><div class="stat-value">{{ cameraFps }}</div><div class="stat-label">实时 FPS</div></div>
-              <div class="stat-item"><div class="stat-value">{{ camInferenceTime }}</div><div class="stat-label">推理耗时(ms)</div></div>
-              <div class="stat-item"><div class="stat-value">{{ camFrameCount }}</div><div class="stat-label">已处理帧</div></div>
-            </div>
-          </el-card>
-          <el-card class="detections-card" shadow="never">
-            <template #header><div class="card-header"><span>当前帧目标列表</span><el-tag size="small">{{ camDetections.length }} 个目标</el-tag></div></template>
-            <div v-if="camDetections.length === 0" class="empty-state">暂无检测目标</div>
-            <div v-else class="detection-list">
-              <div v-for="(det,i) in camDetections" :key="i" class="detection-item">
-                <div class="det-info"><span class="det-class">{{ det.class_name }}</span><el-progress :percentage="Math.round(det.confidence*100)" :stroke-width="6" style="width:120px" /></div>
-                <div class="det-bbox">[{{ det.bbox.map(v=>Math.round(v)).join(', ') }}]</div>
-              </div>
-            </div>
-          </el-card>
-          <!-- 缺陷截图（多张） -->
-          <el-card v-if="camSnapshots.length" class="snapshot-card" shadow="never">
-            <template #header><span>缺陷截图 ({{ camSnapshots.length }})</span><el-tag size="small" type="danger" v-if="camObjectCount>0">{{ camObjectCount }} 处缺陷</el-tag></template>
-            <div style="display:flex;flex-direction:column;gap:8px">
-              <img v-for="(s,i) in camSnapshots" :key="i" :src="'data:image/jpeg;base64,'+s" style="width:100%;border-radius:6px;border:1px solid #e0e0e0" />
-            </div>
-          </el-card>
-        </div>
-      </div>
-      <div class="control-bar">
-        <el-button v-if="!cameraOn" type="primary" size="large" @click="startCamera" :loading="isConnecting">开启摄像头</el-button>
-        <el-button v-else type="danger" size="large" @click="stopCamera">停止检测</el-button>
-        <el-divider direction="vertical" />
-        <span class="control-label">推理模式：</span>
-        <el-radio-group v-model="detectMode" :disabled="cameraOn">
-          <el-radio-button label="cpu">CPU 节能</el-radio-button>
-          <el-radio-button label="gpu">GPU 加速</el-radio-button>
-        </el-radio-group>
-        <el-divider direction="vertical" />
-        <span class="control-label">置信度：</span>
-        <el-slider v-model="confThreshold" :min="0.1" :max="0.9" :step="0.05" :disabled="cameraOn" style="width:150px" show-input />
+  <PhroPageShell
+    title="检测工作台"
+    subtitle="SPRIDS · PCB SMT 缺陷自动光学检测（AOI）"
+  >
+    <template #actions>
+      <div class="phro-tabs">
+        <button
+          v-for="tab in TASK_TYPES"
+          :key="tab.key"
+          type="button"
+          class="phro-tab"
+          :class="{ active: mode === tab.key }"
+          @click="mode = tab.key"
+        >
+          {{ tab.label }}
+        </button>
       </div>
     </template>
 
-    <!-- ========== 检测结果（非 Camera）========== -->
-    <el-card v-if="result && mode !== 'camera'" shadow="never" style="margin-bottom:16px">
-      <template #header>
-        <span>结果</span>
-        <el-tag type="success" style="margin-left:8px">{{ result.total_objects || 0 }} 目标</el-tag>
-        <el-tag type="info" style="margin-left:4px" v-if="result.total_inference_time || result.inference_time">{{ (result.total_inference_time||result.inference_time||0).toFixed(0) }}ms</el-tag>
-      </template>
-      <!-- 类别标签 -->
-      <div v-if="result.class_counts && Object.keys(result.class_counts).length" style="margin-bottom:12px;display:flex;gap:6px;flex-wrap:wrap">
-        <el-tag v-for="(cnt,name) in result.class_counts" :key="name" type="warning">{{ name }}: {{ cnt }}</el-tag>
-      </div>
-      <!-- 单图标注图 -->
-      <img v-if="annotatedSrc && !result.annotated_images && !result.key_frames?.length" :src="annotatedSrc" style="max-width:100%;max-height:400px;border-radius:8px;margin-bottom:12px" />
-      <!-- 批量标注图 -->
-      <div v-if="result.annotated_images?.length" class="annotated-gallery" style="display:flex;flex-wrap:wrap;gap:12px;margin-bottom:12px">
-        <div v-for="(img,i) in result.annotated_images" :key="i" style="width:200px">
-          <img :src="'data:image/jpeg;base64,'+img.annotated_image_base64" style="width:100%;border-radius:6px" />
-          <div style="font-size:11px;color:#909399;text-align:center">{{ (img.image_path||'').split(/[\\/]/).pop() }}</div>
+    <div class="detection-page">
+    <div class="detection-layout">
+      <aside class="detection-side phro-panel-sections">
+        <div class="phro-module">
+          <h3 class="phro-module-title">检测场景</h3>
+          <p class="scene-name">{{ scene?.display_name || 'PCB SMT 缺陷检测' }}</p>
+          <div class="class-tags">
+            <span
+              v-for="name in scene?.class_names || defaultClasses"
+              :key="name"
+              class="phro-tag"
+            >
+              {{ classCn(name) }}
+            </span>
+          </div>
         </div>
-      </div>
-      <!-- 摄像头截图 -->
-      <div v-if="result.snapshot_frames?.length" style="margin-bottom:12px">
-        <div style="font-weight:600;margin-bottom:8px">缺陷截图 ({{ result.snapshot_frames.length }})</div>
-        <div style="display:flex;flex-wrap:wrap;gap:8px">
-          <img v-for="(s,i) in result.snapshot_frames" :key="i" :src="'data:image/jpeg;base64,'+s" style="width:160px;border-radius:6px;border:1px solid #e0e0e0" />
+
+        <div class="phro-module">
+          <h3 class="phro-module-title">检测参数</h3>
+          <DetectionParams v-model="params" />
         </div>
-      </div>
-      <!-- 视频关键帧 -->
-      <div v-if="result.key_frames?.length && !result.snapshot_frames?.length" style="margin-bottom:12px">
-        <div style="font-weight:600;margin-bottom:8px">关键帧 ({{ result.key_frames.length }})</div>
-        <div style="display:flex;flex-wrap:wrap;gap:12px">
-          <div v-for="(kf,i) in result.key_frames.filter(k=>k.annotated_image_base64)" :key="i" style="width:200px">
-            <img :src="'data:image/jpeg;base64,'+kf.annotated_image_base64" style="width:100%;border-radius:6px" />
-            <div style="font-size:11px;color:#909399;text-align:center">帧_{{ kf.frame_index }} ({{ kf.object_count }} obj)</div>
+
+        <!-- 非 Camera：上传区 -->
+        <div v-if="mode !== 'camera'" class="phro-module phro-module--grow">
+          <h3 class="phro-module-title">上传</h3>
+          <div class="phro-module-body">
+          <ImageUploader
+            v-if="mode === 'single'"
+            :disabled="loading"
+            title="上传单张 PCB 图像"
+            @select="handleSingle"
+          />
+          <ImageUploader
+            v-else-if="mode === 'batch'"
+            multiple
+            :disabled="loading"
+            title="批量上传 PCB 图像"
+            hint="可多选，支持 JPG / PNG / WEBP"
+            @select="handleBatch"
+          />
+          <ImageUploader
+            v-else-if="mode === 'video'"
+            accept="video/*"
+            :disabled="loading"
+            title="上传检测视频"
+            hint="支持 MP4 / WEBM"
+            @select="handleVideo"
+          />
+          <div v-if="loading" class="phro-module" style="margin-top:12px">
+            <div style="display:flex;align-items:center;gap:8px;color:#e67e22">
+              <span class="phro-spinner" /> 检测中...
+            </div>
+          </div>
+          <el-progress
+            v-if="videoProgress > 0 && videoProgress < 100"
+            :percentage="videoProgress"
+            :stroke-width="8"
+            class="video-progress"
+          />
+          </div>
+        </div>
+
+        <!-- Camera：控制面板 -->
+        <div v-else class="phro-module phro-module--grow">
+          <h3 class="phro-module-title">摄像头控制</h3>
+          <div class="camera-ctrl-panel">
+            <div v-if="cameraRunning" class="camera-stats-box">
+              <div class="cam-stat"><span class="cam-stat-val">{{ cameraFps }}</span><span class="cam-stat-lbl">实时 FPS</span></div>
+              <div class="cam-stat"><span class="cam-stat-val">{{ camFrameCount }}</span><span class="cam-stat-lbl">已处理帧</span></div>
+              <div class="cam-stat"><span class="cam-stat-val">{{ camInferenceTime }}</span><span class="cam-stat-lbl">推理耗时(ms)</span></div>
+              <div class="cam-stat"><span class="cam-stat-val">{{ camObjectCount }}</span><span class="cam-stat-lbl">当前目标数</span></div>
+            </div>
+            <div class="cam-mode-row">
+              <span class="cam-mode-label">推理模式</span>
+              <el-radio-group v-model="detectMode" :disabled="cameraRunning" size="small">
+                <el-radio-button label="cpu">CPU 节能</el-radio-button>
+                <el-radio-button label="gpu">GPU 加速</el-radio-button>
+              </el-radio-group>
+            </div>
+            <div class="camera-actions">
+              <button
+                type="button"
+                class="phro-btn phro-btn--primary"
+                :disabled="cameraRunning"
+                @click="startCamera"
+              >
+                开启摄像头
+              </button>
+              <button
+                type="button"
+                class="phro-btn"
+                :disabled="!cameraRunning"
+                @click="stopCamera"
+              >
+                停止
+              </button>
+            </div>
+            <div v-if="cameraRunning" class="cam-status-tags">
+              <el-tag type="success" size="small">FPS: {{ cameraFps }}</el-tag>
+              <el-tag type="info" size="small">帧: {{ camFrameCount }}</el-tag>
+              <el-tag type="info" size="small">推理: {{ camInferenceTime }}ms</el-tag>
+            </div>
+          </div>
+        </div>
+      </aside>
+
+      <!-- ===== Camera 主面板 ===== -->
+      <section v-if="mode === 'camera'" class="detection-main camera-layout">
+        <div class="camera-preview-panel">
+          <div class="camera-video-wrapper">
+            <video ref="videoRef" autoplay playsinline muted />
+            <canvas ref="cameraCanvasRef" class="camera-canvas" />
+            <div v-if="!cameraRunning" class="camera-placeholder">点击左侧按钮开启摄像头</div>
+          </div>
+        </div>
+        <div class="camera-result-panel">
+          <div class="phro-module">
+            <h3 class="phro-module-title">
+              当前帧目标列表
+              <el-tag size="small" style="margin-left:8px">{{ camDetections.length }} 个目标</el-tag>
+            </h3>
+            <div v-if="camDetections.length === 0" class="cam-empty">暂无检测目标</div>
+            <div v-else class="cam-det-list">
+              <div v-for="(det, i) in camDetections" :key="i" class="cam-det-item">
+                <div class="cam-det-name">{{ det.class_name }}</div>
+                <el-progress :percentage="Math.round(det.confidence * 100)" :stroke-width="6" style="flex:1;margin:0 12px" />
+                <div class="cam-det-bbox" :title="`[${det.bbox.map(v => Math.round(v)).join(', ')}]`">[{{ det.bbox.map(v => Math.round(v)).join(', ') }}]</div>
+              </div>
+            </div>
+          </div>
+          <!-- 缺陷截图 -->
+          <div v-if="camSnapshots.length" class="phro-module">
+            <h3 class="phro-module-title">缺陷截图 ({{ camSnapshots.length }})</h3>
+            <div class="cam-snapshot-list">
+              <img
+                v-for="(s, i) in camSnapshots"
+                :key="i"
+                :src="'data:image/jpeg;base64,' + s"
+                class="cam-snapshot-img"
+              />
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ===== 非 Camera 主面板 ===== -->
+      <section v-else class="detection-main">
+        <div class="phro-module phro-module--grow preview-card">
+          <h3 class="phro-module-title">检测结果预览</h3>
+          <div class="phro-module-body">
+            <BboxCanvas
+              :image-src="previewImage"
+              :detections="currentDetections"
+              :active-index="activeDetection"
+            />
+          </div>
+        </div>
+
+        <div class="phro-module result-card">
+          <h3 class="phro-module-title">目标列表</h3>
+          <DetectionResultPanel
+            :detections="currentDetections"
+            :active-index="activeDetection"
+            :summary="resultSummary"
+            @select="activeDetection = $event"
+          />
+        </div>
+      </section>
+    </div>
+
+    <!-- 批量/视频结果概览（非 Camera） -->
+    <div v-if="batchResults.length && mode !== 'camera'" class="phro-module batch-card">
+      <h3 class="phro-module-title">
+        {{ mode === 'video' ? '视频关键帧' : '批量结果概览' }} ({{ batchResults.length }})
+        <span style="font-size:11px;color:#999;font-weight:normal;margin-left:6px">点击预览</span>
+      </h3>
+      <div class="batch-grid-scroll">
+        <div class="batch-grid">
+          <div
+            v-for="(item, idx) in batchResults"
+            :key="idx"
+            class="batch-item"
+            @click="selectBatchItem(item)"
+          >
+            <div class="batch-thumb">
+              <img v-if="item.imageUrl" :src="item.imageUrl" :alt="item.name" />
+              <div v-else class="batch-no-img">📋</div>
+            </div>
+            <span class="batch-name">{{ item.name }}</span>
+            <span class="batch-count">{{ item.detections.length }} 个缺陷</span>
           </div>
         </div>
       </div>
-      <!-- 检测列表 -->
-      <el-table :data="detectionsFlat" stripe size="small" max-height="300">
-        <el-table-column label="图片" width="160">
-          <template #default="{row}">{{ (row.image_path || result.filename || '').split(/[\\/]/).pop() || '-' }}</template>
-        </el-table-column>
-        <el-table-column prop="class_name" label="类别" width="140" />
-        <el-table-column label="置信度" width="100">
-          <template #default="{row}">{{ (row.confidence*100).toFixed(1) }}%</template>
-        </el-table-column>
-        <el-table-column label="BBox">
-          <template #default="{row}">{{ row.bbox?.map(Math.round).join(', ') }}</template>
-        </el-table-column>
-      </el-table>
-    </el-card>
-
-    <!-- ========== 历史记录 ========== -->
-    <el-card v-if="history.length" shadow="never">
-      <template #header>
-        <div style="display:flex;justify-content:space-between"><span>检测历史</span><el-button text @click="fetchHistory">刷新</el-button></div>
-      </template>
-      <el-table :data="history" stripe size="small" @row-click="goDetail">
-        <el-table-column prop="id" label="ID" width="60" />
-        <el-table-column prop="task_type" label="类型" width="70" />
-        <el-table-column prop="total_objects" label="目标数" width="80" />
-        <el-table-column label="类别">
-          <template #default="{row}">{{ row.class_names?.join(', ') }}</template>
-        </el-table-column>
-        <el-table-column prop="created_at" label="时间" width="170" />
-      </el-table>
-    </el-card>
-  </div>
+    </div>
+    </div>
+  </PhroPageShell>
 </template>
 
 <script setup>
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
-import { ElMessage } from 'element-plus'
-import { UploadFilled } from '@element-plus/icons-vue'
-import { detectSingle, detectBatch, detectZip, detectVideo, getVideoStatus, listDetections } from '@/api/detection'
+import { ElMessage, ElTag, ElProgress } from 'element-plus'
+import PhroPageShell from '@/components/layout/PhroPageShell.vue'
+import ImageUploader from '@/components/detection/ImageUploader.vue'
+import BboxCanvas from '@/components/detection/BboxCanvas.vue'
+import DetectionParams from '@/components/detection/DetectionParams.vue'
+import DetectionResultPanel from '@/components/detection/DetectionResultPanel.vue'
+import { TASK_TYPES, PCB_SCENE } from '@/constants/pcbDefects'
+import { getScenesApi, detectSingleApi, detectBatchApi, detectZipApi, detectVideoApi, getVideoStatusApi } from '@/api/detection'
 import { createCameraWs } from '@/utils/cameraWs'
-import request from '@/utils/request'
 
-// ── 模式 ──
 const mode = ref('single')
-const conf = ref(0.25)
+const loading = ref(false)
+const scene = ref(PCB_SCENE)
+const params = ref({ confThreshold: 0.25, iouThreshold: 0.45 })
+const previewImage = ref('')
+const currentDetections = ref([])
+const activeDetection = ref(-1)
+const resultSummary = ref(null)
+const batchResults = ref([])
+const videoProgress = ref(0)
 
-// ── 上传 ──
-const currentFile = ref(null)
-const batchFiles = ref([])
-const folderInputRef = ref(null)
-const detecting = ref(false)
-const result = ref(null)
-const annotatedSrc = ref(null)
-const history = ref([])
+const defaultClasses = PCB_SCENE.class_names
 
-const detectionsFlat = computed(() => {
-  const r = result.value
-  if (!r) return []
-  if (r.detections) return r.detections
-  if (r.objects) return r.objects
-  if (r.frames) return r.frames.flatMap(f => f.objects || [])
-  return []
-})
+function classCn(name) {
+  return PCB_SCENE.class_names_cn[name] || name
+}
 
-// ── Camera ──
+async function loadScene() {
+  try {
+    const res = await getScenesApi()
+    const data = Array.isArray(res?.data) ? res.data : (Array.isArray(res) ? res : [res])
+    if (data.length) scene.value = data[0]
+  } catch (e) { console.warn('Load scene failed, using default') }
+}
+
+function setResult(imageUrl, detections, inferenceTime = 0) {
+  previewImage.value = imageUrl
+  currentDetections.value = detections
+  activeDetection.value = detections.length ? 0 : -1
+  resultSummary.value = {
+    totalObjects: detections.length,
+    inferenceTime: Math.round(inferenceTime || detections.reduce((s, d) => s + (d.inference_time || 0), 0)),
+  }
+}
+
+// ── Single ──
+async function handleSingle(file) {
+  loading.value = true
+  batchResults.value = []
+  try {
+    const fd = new FormData(); fd.append('file', file)
+    fd.append('conf', params.value.confThreshold)
+    fd.append('iou', params.value.iouThreshold)
+    const res = await detectSingleApi(fd)
+    const data = res.data || res
+    const defects = data.defects || data.results || []
+    const imgUrl = data.raw_image_base64
+      ? 'data:image/jpeg;base64,' + data.raw_image_base64
+      : (data.annotated_image_base64
+        ? 'data:image/jpeg;base64,' + data.annotated_image_base64
+        : URL.createObjectURL(file))
+    setResult(imgUrl, defects, data.inference_time || 0)
+    ElMessage.success(`检测完成，发现 ${defects.length} 个缺陷`)
+  } catch (e) {
+    ElMessage.error(e.response?.data?.detail || e.message || '检测失败')
+  } finally {
+    loading.value = false
+  }
+}
+
+// ── Batch ──
+async function handleBatch(files) {
+  loading.value = true
+  batchResults.value = []
+  try {
+    const isZip = files.length === 1 && files[0].name.endsWith('.zip')
+    let res
+    if (isZip) {
+      const fd = new FormData(); fd.append('file', files[0])
+      fd.append('conf', params.value.confThreshold)
+      res = await detectZipApi(fd)
+    } else {
+      const fd = new FormData()
+      files.forEach(f => fd.append('files', f))
+      fd.append('conf', params.value.confThreshold)
+      res = await detectBatchApi(fd)
+    }
+    const data = res.data || res
+    const results = data.results || []
+    const grouped = {}
+    results.forEach((r, idx) => {
+      const path = r.image_path || ''
+      let basename = path.split('/').pop() || path.split('\\').pop() || `图片_${idx + 1}`
+      const key = basename
+      if (!grouped[key]) {
+        let imgUrl = ''
+        if (r.raw_image_base64) imgUrl = 'data:image/jpeg;base64,' + r.raw_image_base64
+        else if (r.annotated_image_base64) imgUrl = 'data:image/jpeg;base64,' + r.annotated_image_base64
+        else if (!isZip && files[idx]) imgUrl = URL.createObjectURL(files[idx])
+        let shortName = basename.replace(/\.rf\.[a-f0-9]+/, '')
+        grouped[key] = { name: shortName, imageUrl: imgUrl, detections: [] }
+      }
+      grouped[key].detections.push(...(r.defects || [r]))
+    })
+    batchResults.value = Object.values(grouped)
+    if (batchResults.value.length) selectBatchItem(batchResults.value[0])
+    const totalDefs = batchResults.value.reduce((s, b) => s + (b.detections?.length || 0), 0)
+    ElMessage.success(`批量检测完成，共 ${totalDefs} 个缺陷`)
+  } catch (e) {
+    ElMessage.error(e.response?.data?.detail || e.message || '批量检测失败')
+  } finally {
+    loading.value = false
+  }
+}
+
+function selectBatchItem(item) {
+  setResult(item.imageUrl, item.detections)
+}
+
+// ── Video ──
+async function handleVideo(file) {
+  loading.value = true
+  videoProgress.value = 0
+  batchResults.value = []
+  try {
+    const fd = new FormData(); fd.append('file', file)
+    fd.append('conf', params.value.confThreshold)
+    const taskRes = await detectVideoApi(fd)
+    const taskData = taskRes.data || taskRes
+    const taskId = taskData.task_id
+    if (!taskId) { ElMessage.error('视频上传失败'); loading.value = false; return }
+    ElMessage.info('视频处理中...')
+    let data = null
+    for (let i = 0; i < 120; i++) {
+      await new Promise(r => setTimeout(r, 2000))
+      videoProgress.value = Math.min(90, i * 2)
+      try {
+        const st = await getVideoStatusApi(taskId)
+        const sd = st.data || st
+        if (sd.status === 'COMPLETED' || sd.status === 'completed') {
+          data = sd.result || sd; break
+        } else if (sd.status === 'FAILED' || sd.status === 'failed') {
+          throw new Error(sd.message || '视频检测失败')
+        }
+      } catch(e) { if (e.message.includes('失败')) throw e }
+    }
+    if (!data) { ElMessage.warning('视频超时'); loading.value = false; return }
+    videoProgress.value = 100
+    const frames = data.key_frames || []
+    let allDefects = []
+    frames.forEach(f => {
+      ;(f.detections || []).forEach(d => { d.frame_index = f.frame_index; d.timestamp = f.timestamp })
+      allDefects.push(...(f.detections || []))
+    })
+    if (!allDefects.length) allDefects = data.results || []
+    const kfImgs = frames.filter(f => f.annotated_image_base64)
+    if (kfImgs.length) previewImage.value = 'data:image/jpeg;base64,' + kfImgs[0].annotated_image_base64
+    batchResults.value = frames.map((kf, i) => ({
+      name: `帧 ${kf.frame_index} (${kf.timestamp}s)`,
+      imageUrl: kf.annotated_image_base64
+        ? 'data:image/jpeg;base64,' + kf.annotated_image_base64 : '',
+      detections: kf.detections || [],
+    }))
+    currentDetections.value = allDefects.slice(0, 50)
+    resultSummary.value = {
+      totalObjects: data.total_objects || allDefects.length,
+      inferenceTime: data.total_inference_time || 0,
+      processedFrames: data.processed_frames || frames.length,
+    }
+    ElMessage.success(`视频检测完成，${frames.length} 关键帧，${data.total_objects || allDefects.length} 个目标`)
+  } catch (e) {
+    ElMessage.error(e.response?.data?.detail || e.message || '视频检测失败')
+  } finally {
+    loading.value = false
+    setTimeout(() => { videoProgress.value = 0 }, 1500)
+  }
+}
+
+// ── Camera（与本地 SPRIDS-team 一致）──
 const videoRef = ref(null)
-const canvasRef = ref(null)
-const cameraOn = ref(false)
-const isConnecting = ref(false)
+const cameraCanvasRef = ref(null)
+const cameraRunning = ref(false)
 const detectMode = ref('cpu')
-const confThreshold = ref(0.25)
 const cameraFps = ref(0)
 const camFrameCount = ref(0)
 const camInferenceTime = ref(0)
 const camObjectCount = ref(0)
 const camDetections = ref([])
 const camSnapshots = ref([])
-const canvasWidth = ref(640)
-const canvasHeight = ref(480)
 let cameraWs = null
 let mediaStream = null
 
-onMounted(() => { fetchHistory() })
-onBeforeUnmount(() => { stopCamera() })
-
-// ── 文件处理 ──
-function handleFile(f) {
-  if (mode.value === 'batch') { batchFiles.value.push(f.raw) }
-  else { currentFile.value = f.raw }
-}
-async function uploadFolder() {
-  try {
-    // 优先使用现代 showDirectoryPicker API
-    const dirHandle = await window.showDirectoryPicker()
-    const files = []
-    async function collect(handle, prefix = '') {
-      for await (const [name, entry] of handle.entries()) {
-        if (entry.kind === 'file') {
-          const file = await entry.getFile()
-          file._folderPath = prefix + name
-          files.push(file)
-        } else if (entry.kind === 'directory') {
-          await collect(entry, prefix + name + '/')
-        }
-      }
-    }
-    await collect(dirHandle)
-    if (!files.length) { ElMessage.warning('文件夹中无文件'); return }
-    batchFiles.value.push(...files)
-    ElMessage.success(`已添加 ${files.length} 个文件（检测时自动过滤非图片）`)
-  } catch (e) {
-    // 降级：webkitdirectory
-    if (e.name === 'AbortError') return
-    folderInputRef.value?.click()
-  }
-}
-function handleFolder(e) {
-  const files = Array.from(e.target.files || [])
-  e.target.value = ''
-  files.forEach(f => { f._folderPath = f.webkitRelativePath || f.name })
-  if (!files.length) { ElMessage.warning('文件夹为空'); return }
-  batchFiles.value.push(...files)
-  ElMessage.success(`已添加 ${files.length} 个文件`)
+function sendCameraFrame() {
+  if (!cameraWs || !cameraWs.isConnected || !videoRef.value || videoRef.value.readyState < 2) return
+  const c = document.createElement('canvas')
+  c.width = 416; c.height = 416
+  const ctx = c.getContext('2d')
+  const vw = videoRef.value.videoWidth || 640; const vh = videoRef.value.videoHeight || 480
+  const s = Math.min(416 / vw, 416 / vh)
+  ctx.drawImage(videoRef.value, (416 - vw * s) / 2, (416 - vh * s) / 2, vw * s, vh * s)
+  cameraWs.sendFrame(c.toDataURL('image/jpeg', 0.6).split(',')[1])
 }
 
-// ── 检测 ──
-async function runDetect() {
-  if (!currentFile.value && !batchFiles.value.length) return
-
-  // 文件类型校验
-  const imageExts = ['.jpg','.jpeg','.png','.bmp','.webp']
-  const videoExts = ['.mp4','.avi','.mov','.mkv','.wmv','.flv']
-  if (mode.value === 'single') {
-    const ext = '.' + currentFile.value.name.split('.').pop()?.toLowerCase()
-    if (!imageExts.includes(ext)) { ElMessage.error('单图检测仅支持图片格式: '+imageExts.join(', ')); return }
-  } else if (mode.value === 'batch') {
-    // 自动过滤非图片文件
-    const imageExtsLower = ['.jpg','.jpeg','.png','.bmp','.webp','.tif','.tiff']
-    const valid = batchFiles.value.filter(f => {
-      const name = f._folderPath || f.name || ''
-      const baseName = name.split('/').pop()  // 取文件名部分
-      const ext = '.' + (baseName.includes('.') ? baseName.split('.').pop() : '').toLowerCase()
-      return imageExtsLower.includes(ext) || ext === '.zip'
-    })
-    const skipped = batchFiles.value.length - valid.length
-    if (!valid.length) {
-      const names = batchFiles.value.map(f => f.name).join(', ')
-      ElMessage.error(`没有有效的图片文件。文件列表: ${names}`)
-      return
-    }
-    batchFiles.value = valid
-    if (skipped > 0) ElMessage.warning(`已跳过 ${skipped} 个非图片文件`)
-  } else if (mode.value === 'video') {
-    const ext = '.' + currentFile.value.name.split('.').pop()?.toLowerCase()
-    if (!videoExts.includes(ext)) { ElMessage.error('视频检测仅支持: '+videoExts.join(', ')); return }
-  }
-
-  detecting.value = true; result.value = null; annotatedSrc.value = null
-  try {
-    let res
-    if (mode.value === 'single') {
-      const fd = new FormData(); fd.append('file', currentFile.value); fd.append('conf', conf.value)
-      res = await detectSingle(fd)
-    } else if (mode.value === 'batch') {
-      const isZip = batchFiles.value.length === 1 && batchFiles.value[0].name.endsWith('.zip')
-      if (isZip) {
-        const fd = new FormData(); fd.append('file', batchFiles.value[0]); fd.append('conf', conf.value)
-        res = await detectZip(fd)
-      } else {
-        const fd = new FormData(); batchFiles.value.forEach(f => fd.append('files', f)); fd.append('conf', conf.value)
-        res = await detectBatch(fd)
-      }
-    } else if (mode.value === 'video') {
-      const fd = new FormData(); fd.append('file', currentFile.value); fd.append('conf', conf.value)
-      const taskRes = await detectVideo(fd)
-      const taskId = taskRes.task_id
-      if (taskId) {
-        ElMessage.info('视频处理中...')
-        for (let i = 0; i < 120; i++) {
-          await new Promise(r => setTimeout(r, 2000))
-          try {
-            const st = await getVideoStatus(taskId)
-            if (st.status === 'completed') {
-              res = st.result || {}
-              break
-            } else if (st.status === 'failed') {
-              ElMessage.error(st.message || '视频检测失败')
-              detecting.value = false; return
-            }
-          } catch (e) { /* continue polling */ }
-        }
-        if (!res) { ElMessage.warning('视频超时'); detecting.value = false; return }
-      } else {
-        res = taskRes
-      }
-    }
-    const data = res.data || res
-    result.value = data
-    if (data.annotated_image_base64 && !data.annotated_images) annotatedSrc.value = 'data:image/jpeg;base64,' + data.annotated_image_base64
-    ElMessage.success((data.total_objects || 0) + ' 个目标')
-    fetchHistory()
-  } catch (e) { ElMessage.error('检测失败: ' + (e.message || e)) }
-  finally { detecting.value = false }
-}
-
-// ── 历史 ──
-async function fetchHistory() {
-  try { const res = await listDetections(); history.value = res.items || [] } catch (e) { console.error(e) }
-}
-async function goDetail(row) {
-  try {
-    const res = await request.get('/detection/detail/' + row.id)
-    const data = { ...row, detections: res.results, key_frames: res.key_frames, snapshot_frames: res.snapshot_frames, total_objects: row.total_objects, class_counts: {} }
-    ;(res.results||[]).forEach(r => { data.class_counts[r.class_name] = (data.class_counts[r.class_name]||0)+1 })
-    result.value = data; annotatedSrc.value = null
-    ElMessage.success('已加载 #' + row.id)
-  } catch (e) { ElMessage.error('加载失败') }
-}
-
-// ── Camera ──
 async function startCamera() {
   try {
-    isConnecting.value = true
     mediaStream = await navigator.mediaDevices.getUserMedia({ video: { width: { ideal: 640 }, height: { ideal: 480 }, facingMode: 'user' }, audio: false })
-    videoRef.value.srcObject = mediaStream; await videoRef.value.play()
-    canvasWidth.value = videoRef.value.videoWidth || 640; canvasHeight.value = videoRef.value.videoHeight || 480
+    videoRef.value.srcObject = mediaStream
+    await videoRef.value.play()
+    cameraRunning.value = true
     cameraWs = createCameraWs({
-      mode: detectMode.value, conf: confThreshold.value,
+      mode: detectMode.value, conf: params.value.confThreshold, iou: params.value.iouThreshold,
       onResult: (d) => {
+        // 隐藏原始视频，只显示标注画面
+        if (videoRef.value) videoRef.value.style.display = 'none'
+        // 实时标注画面画在 camera canvas 上
         const img = new Image()
-        img.onload = () => { const ctx = canvasRef.value.getContext('2d'); canvasRef.value.width = img.width; canvasRef.value.height = img.height; ctx.drawImage(img,0,0); requestAnimationFrame(sendFrame) }
+        img.onload = () => {
+          const canvas = cameraCanvasRef.value
+          if (!canvas) return
+          canvas.width = img.width; canvas.height = img.height
+          canvas.getContext('2d').drawImage(img, 0, 0)
+          // 响应驱动：收到结果后才发下一帧
+          requestAnimationFrame(sendCameraFrame)
+        }
         img.src = 'data:image/jpeg;base64,' + d.annotatedFrame
-        cameraFps.value = d.fps; camFrameCount.value = d.frameCount; camInferenceTime.value = d.inferenceTime
-        camObjectCount.value = d.objectCount; camDetections.value = d.detections
-        if (d.objectCount > 0 && camSnapshots.value.length < 10) camSnapshots.value.push(d.annotatedFrame)
+        // 更新统计
+        cameraFps.value = d.fps
+        camFrameCount.value = d.frameCount
+        camInferenceTime.value = d.inferenceTime
+        camObjectCount.value = d.objectCount
+        camDetections.value = d.detections || []
+        // 收集缺陷截图
+        if (d.objectCount > 0 && camSnapshots.value.length < 10) {
+          camSnapshots.value.push(d.annotatedFrame)
+        }
       },
-      onConfigOk: () => { requestAnimationFrame(sendFrame) },
-      onError: (m) => { ElMessage.error(m); isConnecting.value = false },
-      onClose: (data) => { isConnecting.value = false; if (data?.task_id) fetchHistory() },
+      onConfigOk: () => { requestAnimationFrame(sendCameraFrame) },
+      onError: (m) => { ElMessage.error(m) },
+      onClose: () => {},
     })
     cameraWs.connect()
-    cameraOn.value = true; ElMessage.success('摄像头已开启')
-  } catch (e) { ElMessage.error('摄像头失败: ' + e.message); stopCamera() }
+    ElMessage.success('摄像头已开启')
+  } catch (e) {
+    ElMessage.error('摄像头失败: ' + (e.message || '请检查权限'))
+    stopCamera()
+  }
 }
-function sendFrame() {
-  if (!cameraWs || !cameraWs.isConnected || !videoRef.value || videoRef.value.readyState < 2) return
-  const t = detectMode.value === 'cpu' ? 416 : 640
-  const c = document.createElement('canvas'); c.width = t; c.height = t
-  const ctx = c.getContext('2d')
-  const vw = videoRef.value.videoWidth; const vh = videoRef.value.videoHeight
-  const s = Math.min(t/vw, t/vh)
-  ctx.drawImage(videoRef.value, (t-vw*s)/2, (t-vh*s)/2, vw*s, vh*s)
-  cameraWs.sendFrame(c.toDataURL('image/jpeg',0.6).split(',')[1])
-}
+
 function stopCamera() {
   if (cameraWs) { cameraWs.close(); cameraWs = null }
-  if (mediaStream) { mediaStream.getTracks().forEach(t=>t.stop()); mediaStream = null }
-  cameraOn.value = false; isConnecting.value = false
-  cameraFps.value = 0; camFrameCount.value = 0; camInferenceTime.value = 0; camObjectCount.value = 0; camDetections.value = []
+  if (mediaStream) { mediaStream.getTracks().forEach(t => t.stop()); mediaStream = null }
+  cameraRunning.value = false
+  cameraFps.value = 0
+  camFrameCount.value = 0
+  camInferenceTime.value = 0
+  camObjectCount.value = 0
+  camDetections.value = []
   camSnapshots.value = []
-  if (canvasRef.value) { const ctx = canvasRef.value.getContext('2d'); ctx.clearRect(0,0,canvasRef.value.width,canvasRef.value.height) }
+  if (cameraCanvasRef.value) {
+    const ctx = cameraCanvasRef.value.getContext('2d')
+    ctx.clearRect(0, 0, cameraCanvasRef.value.width, cameraCanvasRef.value.height)
+  }
 }
+
+onMounted(loadScene)
+onBeforeUnmount(() => { stopCamera() })
 </script>
 
 <style lang="scss" scoped>
-.detection-page { padding:24px; }
-.page-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; }
-.page-header h2 { margin:0; font-size:20px; }
-.param-row { display:flex; align-items:center; gap:12px; margin-bottom:4px; }
-.param-row span { width:90px; flex-shrink:0; font-size:13px; color:#606266; }
-.param-row .el-slider { flex:1; }
-.main-content { display:flex; gap:20px; flex:1; overflow:hidden; }
-.preview-panel { flex:3; display:flex; flex-direction:column; gap:12px; }
-.video-wrapper { position:relative; background:#000; border-radius:8px; overflow:hidden; min-height:400px; display:flex; align-items:center; justify-content:center; }
-.preview-canvas { width:100%; height:auto; display:block; }
-.placeholder { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; color:#999; font-size:16px; }
-.video-stats { display:flex; gap:8px; }
-.result-panel { flex:2; display:flex; flex-direction:column; gap:12px; overflow-y:auto; }
-.stats-grid { display:grid; grid-template-columns:repeat(2,1fr); gap:12px; }
-.stat-item { text-align:center; padding:12px; background:#f9f9f9; border-radius:8px; }
-.stat-value { font-size:24px; font-weight:700; color:#409eff; }
-.stat-label { font-size:12px; color:#999; margin-top:4px; }
-.card-header { display:flex; align-items:center; justify-content:space-between; }
-.empty-state { text-align:center; color:#999; padding:20px; }
-.detection-list { max-height:300px; overflow-y:auto; }
-.detection-item { display:flex; justify-content:space-between; align-items:center; padding:8px 0; border-bottom:1px solid #f0f0f0; }
-.detection-item:last-child { border-bottom:none; }
-.det-info { display:flex; align-items:center; gap:12px; }
-.det-class { font-weight:600; min-width:80px; }
-.det-bbox { font-size:12px; color:#999; font-family:monospace; }
-.control-bar { display:flex; align-items:center; gap:16px; padding:16px 0; border-top:1px solid #e0e0e0; margin-top:16px; }
-.control-label { font-size:14px; color:#666; white-space:nowrap; }
+@use '@/assets/styles/phro-theme.scss' as phro;
+
+/* 整页填满窗口：预览吃掉剩余高度，批量条固定底部，杜绝预览被压成细条 */
+.detection-page {
+  flex: 1;
+  min-height: 0;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: $phro-module-gap;
+  overflow: hidden;
+}
+
+.detection-layout {
+  flex: 1 1 0;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(220px, 280px) minmax(0, 1fr);
+  gap: $phro-module-gap;
+  overflow: hidden;
+}
+
+.detection-side {
+  min-height: 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+.detection-main {
+  min-height: 0;
+  min-width: 0;
+  height: 100%;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) 168px;
+  gap: $phro-module-gap;
+  overflow: hidden;
+}
+
+.preview-card {
+  min-height: 0;
+  height: 100%;
+  display: flex !important;
+  flex-direction: column;
+  overflow: hidden;
+
+  .phro-module-body {
+    flex: 1 1 0;
+    min-height: 0;
+    height: auto;
+    overflow: hidden;
+  }
+
+  :deep(.bbox-canvas-wrap) {
+    flex: 1 1 0;
+    width: 100%;
+    height: 100%;
+    min-height: 0;
+  }
+}
+
+.result-card {
+  min-height: 0;
+  min-width: 0;
+  height: 100%;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.batch-card {
+  flex: 0 0 auto;
+  flex-shrink: 0;
+  min-width: 0;
+  width: 100%;
+  max-height: 220px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+
+  .phro-module-title {
+    flex-shrink: 0;
+  }
+}
+
+.scene-name {
+  font-size: 14px;
+  color: $phro-text-deep;
+  margin: 0 0 10px;
+}
+
+.class-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+// ── Camera 控制面板（左侧边栏）──
+.camera-ctrl-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.camera-stats-box {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.cam-stat {
+  text-align: center;
+  padding: 8px 4px;
+  background: rgba($phro-gold, 0.08);
+  border-radius: $phro-radius-sm;
+}
+
+.cam-stat-val {
+  display: block;
+  font-size: 20px;
+  font-weight: 700;
+  color: $phro-gold;
+}
+
+.cam-stat-lbl {
+  display: block;
+  font-size: 10px;
+  color: $phro-text-mid;
+  margin-top: 2px;
+}
+
+.cam-mode-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+
+  :deep(.el-radio-button__inner) {
+    background: transparent;
+    border-color: rgba($phro-gold, 0.3);
+    color: $phro-text-mid;
+  }
+
+  :deep(.el-radio-button.is-active .el-radio-button__inner) {
+    background: rgba($phro-gold, 0.2);
+    border-color: $phro-gold;
+    color: $phro-gold;
+    box-shadow: none;
+  }
+
+  :deep(.el-radio-button:hover:not(.is-disabled) .el-radio-button__inner) {
+    color: $phro-gold;
+    border-color: rgba($phro-gold, 0.5);
+  }
+}
+
+.cam-mode-label {
+  font-size: 12px;
+  color: $phro-text-mid;
+  white-space: nowrap;
+}
+
+.camera-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.cam-status-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+// ── Camera 主面板（右侧）──
+.camera-layout {
+  display: flex !important;
+  gap: $phro-module-gap;
+  grid-template-rows: none !important;
+}
+
+.camera-preview-panel {
+  flex: 3;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.camera-video-wrapper {
+  position: relative;
+  flex: 1;
+  background: #000;
+  border-radius: $phro-radius-sm;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 400px;
+}
+
+.camera-canvas {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+
+.camera-placeholder {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #999;
+  font-size: 16px;
+}
+
+.camera-result-panel {
+  flex: 2;
+  display: flex;
+  flex-direction: column;
+  gap: $phro-module-gap;
+  overflow-y: auto;
+}
+
+.cam-empty {
+  text-align: center;
+  color: $phro-text-mid;
+  padding: 20px;
+  font-size: 13px;
+}
+
+// 统一 Element Plus tag 与 Phro 主题色
+.camera-result-panel {
+  :deep(.el-tag) {
+    background: rgba($phro-gold, 0.12);
+    border-color: rgba($phro-gold, 0.25);
+    color: $phro-gold;
+  }
+
+  :deep(.el-tag--success) {
+    background: rgba($phro-gold, 0.15);
+    border-color: rgba($phro-gold, 0.3);
+    color: $phro-gold;
+  }
+
+  :deep(.el-tag--info) {
+    background: rgba($phro-text-mid, 0.1);
+    border-color: rgba($phro-text-mid, 0.2);
+    color: $phro-text-mid;
+  }
+}
+
+.cam-status-tags {
+  :deep(.el-tag) {
+    background: rgba($phro-gold, 0.12);
+    border-color: rgba($phro-gold, 0.25);
+    color: $phro-gold;
+  }
+}
+
+.cam-det-list {
+  max-height: 280px;
+  overflow-y: auto;
+}
+
+.cam-det-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 0;
+  border-bottom: 1px solid rgba($phro-rose, 0.08);
+  min-width: 0;
+}
+
+.cam-det-item:last-child {
+  border-bottom: none;
+}
+
+.cam-det-name {
+  font-weight: 600;
+  min-width: 72px;
+  max-width: 100px;
+  font-size: 12px;
+  color: $phro-text-deep;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.cam-det-bbox {
+  font-size: 11px;
+  color: $phro-text-mid;
+  font-family: monospace;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+  flex: 0 1 auto;
+  max-width: 40%;
+}
+
+.cam-snapshot-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.cam-snapshot-img {
+  width: 100%;
+  border-radius: $phro-radius-sm;
+  border: 1px solid rgba($phro-gold, 0.2);
+}
+
+// ── 非 Camera 样式 ──
+.video-progress {
+  margin-top: 12px;
+}
+
+.batch-grid {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 12px;
+  width: max-content;
+  min-width: 100%;
+}
+
+.batch-grid-scroll {
+  flex: 1 1 auto;
+  min-width: 0;
+  width: 100%;
+  overflow-x: scroll;
+  overflow-y: hidden;
+  padding-bottom: 6px;
+  /* Firefox */
+  scrollbar-width: thin;
+  scrollbar-color: rgba($phro-gold, 0.55) rgba($phro-rose, 0.12);
+
+  /* Chromium / Safari：始终显示可拖动的横向滑动条 */
+  &::-webkit-scrollbar {
+    height: 10px;
+  }
+
+  &::-webkit-scrollbar-track {
+    background: rgba($phro-rose, 0.12);
+    border-radius: 5px;
+  }
+
+  &::-webkit-scrollbar-thumb {
+    background: rgba($phro-gold, 0.55);
+    border-radius: 5px;
+    border: 2px solid transparent;
+    background-clip: padding-box;
+
+    &:hover {
+      background: rgba($phro-gold, 0.75);
+      background-clip: padding-box;
+    }
+  }
+}
+
+.batch-item {
+  @include phro.phro-module-box;
+  flex: 0 0 132px;
+  width: 132px;
+  padding: 8px;
+  cursor: pointer;
+  text-align: center;
+  font-size: 12px;
+  color: $phro-text-deep;
+  transition: border-color 0.2s;
+
+  .batch-thumb {
+    width: 100%;
+    height: 88px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    border-radius: 4px;
+    margin-bottom: 4px;
+    background: var(--phro-panel-bg, #f5f5f5);
+
+    img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+  }
+
+  .batch-no-img {
+    font-size: 32px;
+    opacity: 0.3;
+  }
+
+  .batch-name {
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  &:hover {
+    border-color: rgba($phro-gold, 0.55);
+  }
+
+  .batch-count {
+    display: block;
+    color: $phro-gold;
+    margin-top: 4px;
+  }
+}
+
+@media (max-width: 960px) {
+  .detection-page {
+    overflow-y: auto;
+  }
+
+  .detection-layout {
+    grid-template-columns: 1fr;
+    flex: 1 1 auto;
+    min-height: 520px;
+    overflow: visible;
+  }
+
+  .detection-main {
+    grid-template-rows: minmax(320px, 55vh) 168px;
+    height: auto;
+    overflow: visible;
+  }
+
+  .preview-card {
+    min-height: 320px;
+  }
+
+  .batch-card {
+    max-height: none;
+  }
+
+  .camera-layout {
+    flex-direction: column !important;
+  }
+}
+
+@media (max-height: 700px) {
+  .detection-main {
+    grid-template-rows: minmax(0, 1fr) 140px;
+  }
+
+  .batch-card {
+    max-height: 150px;
+  }
+
+  .batch-item {
+    flex-basis: 120px;
+    width: 120px;
+
+    .batch-thumb {
+      height: 72px;
+    }
+  }
+}
 </style>

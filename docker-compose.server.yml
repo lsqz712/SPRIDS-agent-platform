@@ -1,0 +1,118 @@
+version: "3.8"
+
+services:
+  # Vue前端 Nginx
+  frontend:
+    image: ghcr.io/lsqz712/pcb-frontend:latest
+    container_name: pcb-frontend
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      pcb-net:
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # FastAPI 后端（含PyTorch YOLO推理）
+  backend:
+    image: crpi-se7uno3jhc6pgu1q.cn-beijing.personal.cr.aliyuncs.com/pcb-platform/pcb-backend:latest
+    container_name: pcb-backend
+    restart: unless-stopped
+    env_file:
+      - /opt/pcb-web-platform/.env
+    environment:
+      DB_HOST: postgres
+      REDIS_HOST: redis
+      MINIO_ENDPOINT: minio:9000
+    volumes:
+      - /opt/pcb-web-platform/models:/app/models:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    networks:
+      pcb-net:
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8000/api/health || exit 1"]
+      interval: 30s
+      timeout: 30s
+      retries: 20
+      start_period: 120s
+
+  # PostgreSQL 数据库
+  postgres:
+    image: pgvector/pgvector:pg15
+    container_name: pcb-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${DB_USER:-admin}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-Lty120712!}
+      POSTGRES_DB: ${DB_NAME:-SPRIDS_agent}
+    volumes:
+      - /data/postgres:/var/lib/postgresql/data
+    ports:
+      - "127.0.0.1:5432:5432"
+    networks:
+      pcb-net:
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-admin} -d ${DB_NAME:-SPRIDS_agent}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis缓存
+  redis:
+    image: redis:7-alpine
+    container_name: pcb-redis
+    restart: unless-stopped
+    volumes:
+      - /data/redis:/data
+    command: redis-server --appendonly yes
+    ports:
+      - "127.0.0.1:6379:6379"
+    networks:
+      pcb-net:
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # MinIO 对象存储
+  minio:
+    image: minio/minio:latest
+    container_name: pcb-minio
+    restart: unless-stopped
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
+      MINIO_PUBLIC_ENDPOINT: ${MINIO_PUBLIC_ENDPOINT:-localhost:9000}
+    volumes:
+      - /data/minio:/data
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    command: server /data --console-address ":9001"
+    networks:
+      pcb-net:
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:9000/minio/health/live || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+networks:
+  pcb-net:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16

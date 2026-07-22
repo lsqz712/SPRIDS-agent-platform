@@ -25,6 +25,7 @@ class CameraWs {
   constructor(options) {
     this.ws = null;
     this.isConnected = false;
+    this._closing = false;
 
     this.mode = options.mode || 'cpu';
     this.conf = options.conf || 0.25;
@@ -37,9 +38,7 @@ class CameraWs {
     this.onClose = options.onClose || (() => {});
   }
 
-  /**
-   * 建立 WebSocket 连接
-   */
+  /** 建立 WebSocket 连接 */
   connect() {
     if (this.ws && this.ws.readyState === WebSocket.OPEN) {
       console.warn('[CameraWs] 已存在活跃连接');
@@ -48,7 +47,7 @@ class CameraWs {
 
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const host = window.location.host;
-    const token = localStorage.getItem('SPRIDS_token') || '';
+    const token = localStorage.getItem('SPRIDS_token') || localStorage.getItem('rsod_token') || '';
     const wsUrl = `${protocol}//${host}/api/detection/camera?token=${token}`;
 
     this.ws = new WebSocket(wsUrl);
@@ -56,19 +55,14 @@ class CameraWs {
     this.ws.onopen = () => {
       this.isConnected = true;
       console.log('[CameraWs] 连接已建立');
-
-      this.ws.send(
-        JSON.stringify({
-          type: 'config',
-          mode: this.mode,
-          conf: this.conf,
-          iou: this.iou,
-          scene_id: this.sceneId,
-        }),
-      );
+      this.ws.send(JSON.stringify({
+        type: 'config', mode: this.mode, conf: this.conf,
+        iou: this.iou, scene_id: this.sceneId,
+      }));
     };
 
     this.ws.onmessage = (event) => {
+      if (this._closing) return;
       try {
         const data = JSON.parse(event.data);
         this._handleMessage(data);
@@ -90,42 +84,30 @@ class CameraWs {
     };
   }
 
-  /**
-   * 发送一帧数据
-   * @param {string} base64Data - 帧数据的 Base64 字符串（不含前缀）
-   */
+  /** 发送一帧数据 */
   sendFrame(base64Data) {
+    if (this._closing) return false;
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
       console.warn('[CameraWs] 连接未建立');
       return false;
     }
-
-    if (!base64Data) {
-      return false;
-    }
-
-    this.ws.send(
-      JSON.stringify({
-        type: 'frame',
-        data: base64Data,
-      }),
-    );
+    if (!base64Data) return false;
+    this.ws.send(JSON.stringify({ type: 'frame', data: base64Data }));
     return true;
   }
 
-  /**
-   * 关闭连接
-   */
+  /** 关闭连接 */
   close() {
+    this._closing = true;
     if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-      this.ws.send(JSON.stringify({ type: 'close' }));
-      // 等后端 commit 完发 close_ok 后自动断开，不主动 close
+      try { this.ws.send(JSON.stringify({ type: 'close' })); } catch {}
+      setTimeout(() => {
+        try { if (this.ws && this.ws.readyState === WebSocket.OPEN) this.ws.close(); } catch {}
+      }, 500);
     }
   }
 
-  /**
-   * 更新配置（需要重新连接）
-   */
+  /** 更新配置（无需重连） */
   updateConfig(config) {
     this.mode = config.mode || this.mode;
     this.conf = config.conf || this.conf;
@@ -133,9 +115,7 @@ class CameraWs {
     this.sceneId = config.sceneId;
   }
 
-  /**
-   * 处理后端消息
-   */
+  /** 处理后端消息 */
   _handleMessage(data) {
     switch (data.type) {
       case 'result':
@@ -148,33 +128,24 @@ class CameraWs {
           frameCount: data.frame_count || 0,
         });
         break;
-
       case 'config_ok':
         console.log('[CameraWs] 配置确认:', data.message);
         this.onConfigOk(data);
         break;
-
       case 'close_ok':
         console.log('[CameraWs] 历史已保存:', data.task_id, data.total_objects, '个目标');
         this.onClose(data);
         break;
-
       case 'error':
         console.error('[CameraWs] 服务端错误:', data.message);
         this.onError(data.message);
         break;
-
       default:
         console.warn('[CameraWs] 未知消息类型:', data.type);
     }
   }
 }
 
-/**
- * 创建摄像头 WebSocket 实例
- * @param {object} options
- * @returns {CameraWs}
- */
 export function createCameraWs(options) {
   return new CameraWs(options);
 }

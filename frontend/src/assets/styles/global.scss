@@ -1,13 +1,22 @@
 // ═══════════════════════════════════════════════════════
-// 全局样式 — 通⽤类名、布局辅助
+// 全局样式 — 通用类名、布局辅助
 // ═══════════════════════════════════════════════════════
+
 @use './reset.scss';
-// ── ⻚⾯容器 ────────────────────────────────────────
+@use './phro-message-box.scss';
+@use './phro-dialog.scss';
+@use './phro-dropdown.scss';
+@use './phro-tooltip.scss';
+@use './phro-page.scss';
+@use './phro-selection.scss';
+
+// ── 页面容器 ────────────────────────────────────────
 .page-container {
   padding: $spacing-lg;
-  min-height: calc(100vh - $header-height);
+  min-height: 100vh;
 }
-// ── 卡⽚容器 ────────────────────────────────────────
+
+// ── 卡片容器 ────────────────────────────────────────
 .card-container {
   background: #fff;
   border-radius: $border-radius-md;
@@ -15,32 +24,45 @@
   padding: $spacing-lg;
   margin-bottom: $spacing-md;
 }
+
 // ── Flex 布局辅助 ───────────────────────────────────
 .flex-center {
   display: flex;
   align-items: center;
   justify-content: center;
 }
+
 .flex-between {
   display: flex;
   align-items: center;
   justify-content: space-between;
 }
-// ── ⽂本截断 ────────────────────────────────────────
+
+// ── 文本截断 ────────────────────────────────────────
 .text-ellipsis {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
 // ── 滚动条美化 ──────────────────────────────────────
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;
 }
+
 ::-webkit-scrollbar-thumb {
   background: #c0c4cc;
   border-radius: 3px;
 }
+
 ::-webkit-scrollbar-track {
   background: transparent;
+}
+
+body.feixun-drag-no-select,
+body.feixun-drag-no-select * {
+  user-select: none !important;
+  -webkit-user-select: none !important;
+  -moz-user-select: none !important;
 }

@@ -5,16 +5,17 @@
 - GET  /api/scenes/{id} 获取场景详情
 """
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import desc
 from app.database.session import get_db
-from app.api.auth import get_current_user
+from app.api.deps import get_current_user, check_permission
+from app.api.utils import success_response
 from app.entity.db_models import User, DetectionScene, ModelVersion
 from app.entity.schemas import SceneCreate, SceneResponse
 
 router = APIRouter(prefix="/api/scenes", tags=["检测场景"])
 
-@router.post("", response_model=SceneResponse, status_code=201)
+@router.post("", status_code=201, dependencies=[Depends(check_permission("scene:create"))])
 async def create_scene(
     request: SceneCreate,
     db: Session = Depends(get_db),
@@ -38,16 +39,18 @@ async def create_scene(
     db.commit()
     db.refresh(new_scene)
     
-    return SceneResponse(**new_scene.__dict__)
+    return success_response(data=SceneResponse(**new_scene.__dict__), message="场景创建成功")
 
-@router.get("", response_model=list[SceneResponse])
+@router.get("")
 async def get_scenes(
     category: str = None,
     is_active: bool = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    query = db.query(DetectionScene)
+    query = db.query(DetectionScene).options(
+        joinedload(DetectionScene.model_versions)
+    )
     
     if category:
         query = query.filter(DetectionScene.category == category)
@@ -59,11 +62,11 @@ async def get_scenes(
     
     results = []
     for scene in scenes:
-        default_model = db.query(ModelVersion).filter(
-            ModelVersion.scene_id == scene.id,
-            ModelVersion.is_default == True,
-            ModelVersion.status == "active"
-        ).first()
+        default_model = None
+        for mv in scene.model_versions:
+            if mv.is_default and mv.status == "active":
+                default_model = mv
+                break
         
         scene_dict = scene.__dict__.copy()
         if default_model:
@@ -75,23 +78,25 @@ async def get_scenes(
         
         results.append(SceneResponse(**scene_dict))
     
-    return results
+    return success_response(data=results)
 
-@router.get("/{scene_id}", response_model=SceneResponse)
+@router.get("/{scene_id}")
 async def get_scene(
     scene_id: int,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    scene = db.query(DetectionScene).filter(DetectionScene.id == scene_id).first()
+    scene = db.query(DetectionScene).options(
+        joinedload(DetectionScene.model_versions)
+    ).filter(DetectionScene.id == scene_id).first()
     if not scene:
         raise HTTPException(status_code=404, detail=f"场景 ID {scene_id} 不存在")
     
-    default_model = db.query(ModelVersion).filter(
-        ModelVersion.scene_id == scene.id,
-        ModelVersion.is_default == True,
-        ModelVersion.status == "active"
-    ).first()
+    default_model = None
+    for mv in scene.model_versions:
+        if mv.is_default and mv.status == "active":
+            default_model = mv
+            break
     
     scene_dict = scene.__dict__.copy()
     if default_model:
@@ -101,4 +106,4 @@ async def get_scene(
             "model_name": default_model.model_name,
         }
     
-    return SceneResponse(**scene_dict)
+    return success_response(data=SceneResponse(**scene_dict))

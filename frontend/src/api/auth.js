@@ -1,25 +1,78 @@
 /**
- * 认证相关 API 接⼝
+ * 认证相关 API 接口
  */
 import request from '@/utils/request'
+
 /**
- * ⽤户注册
+ * 用户注册
  * @param {Object} data - { username, email, password }
  */
 export function registerApi(data) {
   return request.post('/auth/register', data)
 }
+
 /**
- * ⽤户登录
+ * 用户登录
  * @param {Object} data - { username, password }
  * @returns {Promise} - { access_token, token_type, user }
  */
 export function loginApi(data) {
   return request.post('/auth/login', data)
 }
+
 /**
- * 获取当前⽤户信息（需要 Token）
+ * 获取当前用户信息（需要 Token）
  */
 export function getUserInfoApi() {
   return request.get('/auth/me')
+}
+
+/**
+ * 更新当前用户资料
+ * @param {Object} data - { username?, email?, phone?, avatar? }
+ */
+export function updateProfileApi(data) {
+  return request.patch('/auth/me', data)
+}
+
+/**
+ * 修改密码
+ * @param {Object} data - { old_password, new_password }
+ */
+export function changePasswordApi(data) {
+  return request.post('/auth/change-password', data)
+}
+
+/**
+ * 上传当前用户头像
+ * @param {File} file
+ */
+export function uploadAvatarApi(file) {
+  const formData = new FormData()
+  formData.append('file', file)
+  return request.post('/auth/me/avatar', formData)
+}
+
+/**
+ * 获取角色申请列表（管理员）
+ * @param {Object} params - { status? }
+ */
+export function getRoleApplicationsApi(params) {
+  return request.get('/roles/applications/', { params })
+}
+
+/**
+ * 获取当前用户的角色申请记录
+ */
+export function getMyRoleApplicationsApi() {
+  return request.get('/roles/me/applications')
+}
+
+/**
+ * 审批角色申请（管理员）
+ * @param {number} applicationId - 申请ID
+ * @param {Object} data - { status, comment? }
+ */
+export function approveRoleApplicationApi(applicationId, data) {
+  return request.post(`/roles/applications/${applicationId}/approve`, data)
 }

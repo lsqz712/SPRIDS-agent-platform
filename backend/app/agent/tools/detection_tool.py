@@ -1,266 +1,120 @@
 """
-检测工具
-提供检测任务的创建和查询功能
+检测工具集 — Agent 可调用的检测相关 @tool 函数
+
+工具列表：
+  - detect_single_image: 单张图片检测
+  - detect_batch_images: 批量图片检测
+  - detect_zip_images_file: ZIP 文件解压检测
+  - detect_video_file: 视频文件检测
 """
-from typing import Dict, Any, List, Optional
-from datetime import datetime
-from app.agent.tools import BaseTool, ToolRegistry
-from app.entity.db_models import DetectionTask, DetectionResult, DetectionScene, PCBBatch, ModelVersion
-from app.services.yolo_inference import detect, batch_detect
-from sqlalchemy.orm import Session
-from sqlalchemy import desc
-class DetectionTool(BaseTool):
-    """检测工具实现"""
-    def __init__(self, db: Session):
-        self.db = db
-    def get_name(self) -> str:
-        return "run_detection"
-    def get_description(self) -> str:
-        return "执行 PCB 缺陷检测任务，支持单图检测和批量检测"
-    def get_parameters(self) -> Dict[str, Any]:
-        return {
-            "type": "object",
-            "properties": {
-                "image_path": {
-                    "type": "string",
-                    "description": "图像文件路径或 URL"
-                },
-                "scene_id": {
-                    "type": "integer",
-                    "description": "检测场景 ID"
-                },
-                "batch_id": {
-                    "type": "integer",
-                    "description": "PCB 批次 ID（可选）"
-                },
-                "conf_threshold": {
-                    "type": "number",
-                    "description": "置信度阈值，默认 0.25"
-                },
-                "iou_threshold": {
-                    "type": "number",
-                    "description": "IoU 阈值，默认 0.45"
-                }
-            },
-            "required": ["image_path"]
-        }
-    def execute(self, **kwargs) -> Dict[str, Any]:
-        image_path = kwargs.get("image_path")
-        scene_id = kwargs.get("scene_id", 1)
-        batch_id = kwargs.get("batch_id")
-        conf_threshold = kwargs.get("conf_threshold", 0.25)
-        iou_threshold = kwargs.get("iou_threshold", 0.45)
-        
-        scene = self.db.query(DetectionScene).filter(DetectionScene.id == scene_id).first()
-        if not scene:
-            return {"error": f"检测场景 ID {scene_id} 不存在"}
-        
-        default_model = self.db.query(ModelVersion).filter(
-            ModelVersion.scene_id == scene_id,
-            ModelVersion.is_default == True,
-            ModelVersion.status == "active"
-        ).first()
-        
-        if not default_model:
-            default_model = self.db.query(ModelVersion).filter(
-                ModelVersion.scene_id == scene_id,
-                ModelVersion.status == "active"
-            ).order_by(desc(ModelVersion.created_at)).first()
-        
-        if not default_model:
-            return {"error": f"场景 {scene_id} 没有可用的模型版本"}
-        
-        model_path = default_model.model_path
-        
-        new_task = DetectionTask(
-            user_id=1,
-            scene_id=scene_id,
-            task_type="single",
-            status="processing",
-            total_images=1,
-            total_objects=0,
-            total_inference_time=0.0,
-            conf_threshold=conf_threshold,
-            iou_threshold=iou_threshold,
-            image_size=640,
-            batch_id=batch_id,
-            model_version_id=default_model.id,
-        )
-        self.db.add(new_task)
-        self.db.commit()
-        self.db.refresh(new_task)
-        
-        try:
-            detect_result = detect(
-                model_path=model_path,
-                image_path=image_path,
-                conf_threshold=conf_threshold,
-                iou_threshold=iou_threshold,
-            )
-            
-            defects = detect_result.get("defects", [])
-            inference_time = detect_result.get("inference_time", 0.0)
-            image_width = detect_result.get("image_width", 640)
-            image_height = detect_result.get("image_height", 640)
-            
-            for defect in defects:
-                result = DetectionResult(
-                    task_id=new_task.id,
-                    image_path=image_path,
-                    class_name=defect["class_name"],
-                    class_name_cn=defect["class_name_cn"],
-                    class_id=defect["class_id"],
-                    confidence=defect["confidence"],
-                    bbox=defect["bbox"],
-                    inference_time=defect.get("inference_time", inference_time),
-                    image_width=image_width,
-                    image_height=image_height,
-                )
-                self.db.add(result)
-                new_task.total_objects += 1
-            
-            new_task.status = "completed"
-            new_task.total_inference_time = inference_time
-            new_task.completed_at = datetime.now()
-            self.db.commit()
-            
-            return {
-                "task_id": new_task.id,
-                "task_type": new_task.task_type,
-                "status": new_task.status,
-                "scene_name": scene.display_name,
-                "model_version": default_model.version,
-                "model_name": default_model.model_name,
-                "total_images": new_task.total_images,
-                "total_objects": new_task.total_objects,
-                "inference_time": new_task.total_inference_time,
-                "defects": defects,
-            }
-        
-        except Exception as e:
-            new_task.status = "failed"
-            new_task.completed_at = datetime.now()
-            self.db.commit()
-            return {"error": f"检测失败: {str(e)}"}
-class DetectionResultTool(BaseTool):
-    """检测结果查询工具"""
-    def __init__(self, db: Session):
-        self.db = db
-    def get_name(self) -> str:
-        return "get_detection_result"
-    def get_description(self) -> str:
-        return "查询检测结果详情，包括缺陷标注和统计信息"
-    def get_parameters(self) -> Dict[str, Any]:
-        return {
-            "type": "object",
-            "properties": {
-                "task_id": {
-                    "type": "integer",
-                    "description": "检测任务 ID"
-                }
-            },
-            "required": ["task_id"]
-        }
-    def execute(self, **kwargs) -> Dict[str, Any]:
-        task_id = kwargs.get("task_id")
-        task = self.db.query(DetectionTask).filter(DetectionTask.id == task_id).first()
-        if not task:
-            return {"error": f"检测任务 ID {task_id} 不存在"}
-        scene = self.db.query(DetectionScene).filter(DetectionScene.id == task.scene_id).first()
-        batch = None
-        if task.batch_id:
-            batch = self.db.query(PCBBatch).filter(PCBBatch.id == task.batch_id).first()
-        results = self.db.query(DetectionResult).filter(DetectionResult.task_id == task_id).all()
-        defect_list = []
-        class_distribution = {}
-        for result in results:
-            defect_list.append({
-                "id": result.id,
-                "class_name": result.class_name,
-                "class_name_cn": result.class_name_cn,
-                "confidence": result.confidence,
-                "bbox": result.bbox,
-                "review_status": result.review_status.value if result.review_status else "pending",
-                "severity": result.severity.value if result.severity else None,
-            })
-            class_distribution[result.class_name_cn or result.class_name] = (
-                class_distribution.get(result.class_name_cn or result.class_name, 0) + 1
-            )
-        return {
-            "task_id": task.id,
-            "task_type": task.task_type,
-            "status": task.status,
-            "scene_name": scene.display_name if scene else None,
-            "batch_no": batch.batch_no if batch else None,
-            "total_images": task.total_images,
-            "total_objects": task.total_objects,
-            "inference_time": task.total_inference_time,
-            "conf_threshold": task.conf_threshold,
-            "iou_threshold": task.iou_threshold,
-            "class_distribution": class_distribution,
-            "defects": defect_list,
-            "created_at": task.created_at.isoformat() if task.created_at else None,
-            "completed_at": task.completed_at.isoformat() if task.completed_at else None,
-        }
-class TaskListTool(BaseTool):
-    """任务列表查询工具"""
-    def __init__(self, db: Session):
-        self.db = db
-    def get_name(self) -> str:
-        return "get_task_list"
-    def get_description(self) -> str:
-        return "获取检测任务列表，支持按状态、时间筛选"
-    def get_parameters(self) -> Dict[str, Any]:
-        return {
-            "type": "object",
-            "properties": {
-                "status": {
-                    "type": "string",
-                    "description": "任务状态：pending/processing/completed/failed"
-                },
-                "page": {
-                    "type": "integer",
-                    "description": "页码，默认 1"
-                },
-                "page_size": {
-                    "type": "integer",
-                    "description": "每页数量，默认 20"
-                }
-            }
-        }
-    def execute(self, **kwargs) -> Dict[str, Any]:
-        status = kwargs.get("status")
-        page = kwargs.get("page", 1)
-        page_size = kwargs.get("page_size", 20)
-        query = self.db.query(DetectionTask)
-        if status:
-            query = query.filter(DetectionTask.status == status)
-        query = query.order_by(desc(DetectionTask.created_at))
-        total = query.count()
-        offset = (page - 1) * page_size
-        tasks = query.offset(offset).limit(page_size).all()
-        task_list = []
-        for task in tasks:
-            scene = self.db.query(DetectionScene).filter(DetectionScene.id == task.scene_id).first()
-            task_list.append({
-                "id": task.id,
-                "task_type": task.task_type,
-                "status": task.status,
-                "scene_name": scene.display_name if scene else None,
-                "total_images": task.total_images,
-                "total_objects": task.total_objects,
-                "inference_time": task.total_inference_time,
-                "created_at": task.created_at.isoformat() if task.created_at else None,
-                "completed_at": task.completed_at.isoformat() if task.completed_at else None,
-            })
-        return {
-            "total": total,
-            "page": page,
-            "page_size": page_size,
-            "total_pages": (total + page_size - 1) // page_size,
-            "tasks": task_list,
-        }
-def register_detection_tools(registry: ToolRegistry, db: Session):
-    registry.register(DetectionTool(db))
-    registry.register(DetectionResultTool(db))
-    registry.register(TaskListTool(db))
+
+import json
+
+from langchain_core.tools import tool
+
+from app.agent.shared import compress_tool_output
+from app.core.logger import get_logger
+from app.services.detection_service import detection_service
+
+logger = get_logger(__name__)
+
+
+@tool
+def detect_single_image(image_path: str, conf: float = 0.25, iou: float = 0.45) -> str:
+    """检测单张图片中的目标物体。
+
+    当用户上传了一张图片并要求检测、识别、分析图中的目标时使用此工具。
+
+    Args:
+        image_path: 图片文件的服务器路径（绝对路径），如 /tmp/rsod_uploads/xxx.jpg
+        conf: 置信度阈值，0~1 之间，默认 0.25
+        iou: NMS IoU 阈值，0~1 之间，默认 0.45
+
+    Returns:
+        JSON 字符串，包含检测结果（目标数量、类别统计、标注图路径、推理耗时）
+    """
+    try:
+        result = detection_service.detect_single(image_path, conf=conf, iou=iou)
+        logger.info("单图检测完成: %s, 目标数: %d", image_path, result.get("total_objects", 0))
+        return compress_tool_output(result)
+    except Exception as e:
+        logger.error("单图检测失败: %s", str(e))
+        return json.dumps({"error": f"检测失败: {str(e)}"}, ensure_ascii=False)
+
+
+@tool
+def detect_batch_images(image_paths: list[str], conf: float = 0.25) -> str:
+    """批量检测多张图片中的目标物体。
+
+    当用户一次上传了多张图片，或者要求"检测所有图片"时使用此工具。
+
+    Args:
+        image_paths: 图片文件路径列表
+        conf: 置信度阈值，默认 0.25
+
+    Returns:
+        JSON 字符串，包含每张图片的检测结果汇总
+    """
+    try:
+        result = detection_service.detect_batch(image_paths, conf=conf)
+        logger.info("批量检测完成: %d 张图片", len(image_paths))
+        return compress_tool_output(result)
+    except Exception as e:
+        logger.error("批量检测失败: %s", str(e))
+        return json.dumps({"error": f"批量检测失败: {str(e)}"}, ensure_ascii=False)
+
+
+@tool
+def detect_zip_images_file(zip_path: str, conf: float = 0.25) -> str:
+    """解压 ZIP 文件并批量检测其中所有图片的目标物体。
+
+    当用户上传了 ZIP 压缩包进行批量检测时使用此工具。
+
+    Args:
+        zip_path: ZIP 文件的服务器路径
+        conf: 置信度阈值，默认 0.25
+
+    Returns:
+        JSON 字符串，包含 ZIP 内所有图片的检测结果汇总
+    """
+    try:
+        result = detection_service.detect_zip(zip_path, conf=conf)
+        logger.info("ZIP 检测完成: %s", zip_path)
+        return json.dumps(result, ensure_ascii=False)
+    except Exception as e:
+        logger.error("ZIP 检测失败: %s", str(e))
+        return json.dumps({"error": f"ZIP 检测失败: {str(e)}"}, ensure_ascii=False)
+
+
+@tool
+def detect_video_file(video_path: str, conf: float = 0.25, frame_sample_rate: int = 5) -> str:
+    """检测视频文件中的目标物体。对视频进行帧采样后逐帧检测。
+
+    当用户上传了视频文件并要求检测视频中的目标时使用此工具。
+
+    Args:
+        video_path: 视频文件的服务器路径（mp4/avi/mov 等格式）
+        conf: 置信度阈值，默认 0.25
+        frame_sample_rate: 帧采样间隔，每 N 帧取 1 帧进行检测，默认 5
+
+    Returns:
+        JSON 字符串，包含视频检测结果（关键帧目标统计、视频时长、处理帧数）
+    """
+    result = detection_service.detect_video(
+        video_path, conf=conf, frame_sample_rate=frame_sample_rate
+    )
+    if "key_frames" in result:
+        for frame in result["key_frames"]:
+            frame.pop("annotated_image_base64", None)
+    result.pop("annotated_video_url", None)
+    logger.info("视频检测完成: %s", video_path)
+    return json.dumps(result, ensure_ascii=False)
+
+
+# 工具列表
+DETECTION_TOOLS = [
+    detect_single_image,
+    detect_batch_images,
+    detect_zip_images_file,
+    detect_video_file,
+]

@@ -53,6 +53,7 @@ class User(Base):
     avatar = Column(String(500), nullable=True, comment="头像 URL")
     is_active = Column(Boolean, default=True, comment="是否启用")
     is_superuser = Column(Boolean, default=False, comment="是否超级管理员")
+    is_approved = Column(Boolean, default=False, comment="是否已审批通过")
     last_login_at = Column(DateTime, nullable=True, comment="最后登录时间")
     created_at = Column(DateTime, default=datetime.now, comment="创建时间")
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now, comment="更新时间")
@@ -64,6 +65,7 @@ class User(Base):
     training_tasks = relationship("TrainingTask", back_populates="user")
     chat_sessions = relationship("ChatSession", back_populates="user")
     operation_logs = relationship("OperationLog", back_populates="user")
+    role_applications = relationship("RoleApplication", back_populates="user", cascade="all, delete-orphan", foreign_keys="RoleApplication.user_id")
 
 
 class Role(Base):
@@ -116,6 +118,23 @@ class RolePermission(Base):
     permission = relationship("Permission", back_populates="role_permissions")
 
 
+class RoleApplication(Base):
+    """角色申请记录表"""
+    __tablename__ = "role_applications"
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True, comment="申请人")
+    role_id = Column(Integer, ForeignKey("roles.id", ondelete="CASCADE"), nullable=False, index=True, comment="申请的角色")
+    status = Column(String(20), default="pending", comment="申请状态：pending/approved/rejected")
+    approver_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True, comment="审批人")
+    approve_comment = Column(String(500), nullable=True, comment="审批意见")
+    applied_at = Column(DateTime, default=datetime.now, comment="申请时间")
+    approved_at = Column(DateTime, nullable=True, comment="审批时间")
+
+    user = relationship("User", back_populates="role_applications", foreign_keys=[user_id])
+    role = relationship("Role")
+    approver = relationship("User", foreign_keys=[approver_id])
+
+
 # ══════════════════════════════════════════════════════════════
 # 二、检测业务（适配 SMT PCB 产线）
 # ══════════════════════════════════════════════════════════════
@@ -156,6 +175,7 @@ class DetectionTask(Base):
     model_version_id = Column(Integer, ForeignKey("model_versions.id", ondelete="SET NULL"), nullable=True, comment="使用的模型版本")
     
     task_type = Column(String(20), nullable=False, comment="检测类型：single/batch/folder/video/camera")
+    source = Column(String(20), default="manual", comment="任务来源：quick（快捷检测）/batch（批次检测）/manual（手动创建）")
     status = Column(Enum(TaskStatus), default=TaskStatus.PENDING, nullable=False, comment="任务状态")
     
     total_images = Column(Integer, default=0, comment="处理图像总数")
@@ -438,6 +458,25 @@ class PCBBatch(Base):
     created_by = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     created_at = Column(DateTime, default=datetime.now)
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+
+    images = relationship("BatchImage", back_populates="batch", cascade="all, delete-orphan")
+
+
+class BatchImage(Base):
+    """批次图片表 — 存储批次关联的PCB检测图片"""
+    __tablename__ = "batch_images"
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    batch_id = Column(Integer, ForeignKey("pcb_batches.id", ondelete="CASCADE"), nullable=False, index=True, comment="关联批次")
+    image_path = Column(String(500), nullable=False, comment="图片相对路径")
+    image_url = Column(String(500), nullable=False, comment="图片访问URL")
+    filename = Column(String(200), nullable=False, comment="原始文件名")
+    file_size = Column(Integer, nullable=True, comment="文件大小（字节）")
+    image_width = Column(Integer, nullable=True, comment="图片宽度")
+    image_height = Column(Integer, nullable=True, comment="图片高度")
+    status = Column(String(20), default="pending", comment="状态：pending/detected/pass/fail")
+    created_at = Column(DateTime, default=datetime.now)
+
+    batch = relationship("PCBBatch", back_populates="images")
 
 class DefectType(Base):
     """缺陷类型字典表 — 标准化管理PCB缺陷类型"""

@@ -1,78 +1,273 @@
 """
-⽤户服务层
-处理⽤户注册、登录、鉴权等业务逻辑
+用户服务层
 """
-from fastapi import HTTPException
+import uuid
+
+from fastapi import HTTPException, UploadFile
 from sqlalchemy.orm import Session
+
 from app.core.security import create_access_token, hash_password, verify_password
-from app.entity.db_models import User
+from app.entity.db_models import User, Role, RoleApplication
+from app.services.role_service import user_role_service
+from app.storage.minio_client import minio_client
+
+AVATAR_MAX_BYTES = 2 * 1024 * 1024
+AVATAR_ALLOWED_TYPES = {
+    "image/jpeg": ".jpg",
+    "image/png": ".png",
+    "image/webp": ".webp",
+    "image/gif": ".gif",
+}
+
+REQUIRE_APPROVAL_ROLES = {"admin", "operator", "engineer"}
+
+
 class UserService:
-    """⽤户服务"""
     @staticmethod
-    def register(db: Session, username: str, email: str, password: str) -> User:
-        """
-        ⽤户注册
-        Args:
-            db: 数据库会话
-            username: ⽤户名
-            email: 邮箱
-            password: 明⽂密码
-        Returns:
-            新创建的⽤户对象
-        Raises:
-            HTTPException: ⽤户名或邮箱已存在
-        """
-        # 检查⽤户名是否已存在
-        existing_user = db.query(User).filter(User.username == username).first()
-        if existing_user:
-            raise HTTPException(status_code=400, detail="⽤户名已存在")
-        # 检查邮箱是否已存在
-        existing_email = db.query(User).filter(User.email == email).first()
-        if existing_email:
+    def register(db: Session, username: str, email: str, password: str, role: str = "viewer") -> User:
+        if db.query(User).filter(User.username == username).first():
+            raise HTTPException(status_code=400, detail="用户名已存在")
+        if db.query(User).filter(User.email == email).first():
             raise HTTPException(status_code=400, detail="邮箱已被注册")
-        # 创建新⽤户
-        new_user = User(
-            username=username,
-            email=email,
-            hashed_password=hash_password(password),
-        )
-        db.add(new_user)
+
+        valid_roles = {"admin", "operator", "engineer", "viewer"}
+        if role not in valid_roles:
+            raise HTTPException(status_code=400, detail=f"无效的角色，可选: {', '.join(valid_roles)}")
+
+        target_role = db.query(Role).filter(Role.name == role).first()
+        if not target_role:
+            raise HTTPException(status_code=500, detail="角色不存在")
+
+        if role in REQUIRE_APPROVAL_ROLES:
+            new_user = User(
+                username=username,
+                email=email,
+                hashed_password=hash_password(password),
+                is_approved=False,
+            )
+            db.add(new_user)
+            db.flush()
+
+            application = RoleApplication(
+                user_id=new_user.id,
+                role_id=target_role.id,
+                status="pending",
+            )
+            db.add(application)
+        else:
+            new_user = User(
+                username=username,
+                email=email,
+                hashed_password=hash_password(password),
+                is_approved=True,
+            )
+            db.add(new_user)
+            db.flush()
+            user_role_service.assign_role_to_user(db, new_user.id, target_role.id)
+
         db.commit()
         db.refresh(new_user)
+
         return new_user
+
     @staticmethod
     def login(db: Session, username: str, password: str) -> User:
-        """
-        ⽤户登录
-        Args:
-            db: 数据库会话
-            username: ⽤户名
-            password: 明⽂密码
-        Returns:
-            登录成功的⽤户对象
-        Raises:
-            HTTPException: ⽤户名或密码错误
-        """
         user = db.query(User).filter(User.username == username).first()
-        if not user:
-            raise HTTPException(status_code=401, detail="⽤户名或密码错误")
-        if not verify_password(password, user.hashed_password):
-            raise HTTPException(status_code=401, detail="⽤户名或密码错误")
+        if not user or not verify_password(password, user.hashed_password):
+            raise HTTPException(status_code=401, detail="用户名或密码错误")
+
+        if not user.is_active:
+            raise HTTPException(status_code=401, detail="账号已被禁用")
+
+        if not user.is_approved:
+            raise HTTPException(status_code=401, detail="账号尚未通过审批，请等待管理员审批")
+
         return user
+
     @staticmethod
     def create_access_token_for_user(user: User) -> str:
-        """为⽤户⽣成 JWT Token"""
         return create_access_token(data={"sub": str(user.id)})
+
     @staticmethod
     def get_user_roles(db: Session, user: User) -> list[str]:
-        """获取⽤户的⻆⾊标识列表"""
         return [ur.role.name for ur in user.user_roles]
+
     @staticmethod
     def get_user_by_id(db: Session, user_id: int) -> User:
-        """根据 ID 获取⽤户"""
         user = db.query(User).filter(User.id == user_id).first()
         if not user:
-            raise HTTPException(status_code=404, detail="⽤户不存在")
+            raise HTTPException(status_code=404, detail="用户不存在")
         return user
-# 全局单例
+
+    @staticmethod
+    def get_role_applications(db: Session, status: str = None) -> list[RoleApplication]:
+        query = db.query(RoleApplication)
+        if status:
+            query = query.filter(RoleApplication.status == status)
+        return query.order_by(RoleApplication.applied_at.desc()).all()
+
+    @staticmethod
+    def get_user_role_applications(db: Session, user_id: int) -> list[RoleApplication]:
+        return db.query(RoleApplication).filter(
+            RoleApplication.user_id == user_id
+        ).order_by(RoleApplication.applied_at.desc()).all()
+
+    @staticmethod
+    def approve_role_application(db: Session, application_id: int, approver_id: int, status: str, comment: str = None) -> RoleApplication:
+        application = db.query(RoleApplication).filter(RoleApplication.id == application_id).first()
+        if not application:
+            raise HTTPException(status_code=404, detail="申请不存在")
+
+        if application.status != "pending":
+            raise HTTPException(status_code=400, detail="申请已处理")
+
+        if status not in {"approved", "rejected"}:
+            raise HTTPException(status_code=400, detail="无效的审批状态")
+
+        application.status = status
+        application.approver_id = approver_id
+        application.approve_comment = comment
+
+        if status == "approved":
+            user = db.query(User).filter(User.id == application.user_id).first()
+            if user:
+                user.is_approved = True
+                user_role_service.assign_role_to_user(db, user.id, application.role_id)
+
+        db.commit()
+        db.refresh(application)
+        return application
+
+    @staticmethod
+    def update_profile(db: Session, user: User, updates: dict) -> User:
+        if "username" in updates:
+            username = updates["username"]
+            if username != user.username:
+                existing = (
+                    db.query(User)
+                    .filter(User.username == username, User.id != user.id)
+                    .first()
+                )
+                if existing:
+                    raise HTTPException(status_code=400, detail="用户名已存在")
+                user.username = username
+
+        if "email" in updates:
+            email = updates["email"]
+            if email != user.email:
+                existing = (
+                    db.query(User)
+                    .filter(User.email == email, User.id != user.id)
+                    .first()
+                )
+                if existing:
+                    raise HTTPException(status_code=400, detail="邮箱已被注册")
+                user.email = email
+
+        if "phone" in updates:
+            user.phone = updates["phone"] or None
+
+        if "avatar" in updates:
+            user.avatar = updates["avatar"] or None
+
+        db.commit()
+        db.refresh(user)
+        return user
+
+    @staticmethod
+    def change_password(
+        db: Session,
+        user: User,
+        old_password: str,
+        new_password: str,
+    ) -> None:
+        if not verify_password(old_password, user.hashed_password):
+            raise HTTPException(status_code=400, detail="当前密码不正确")
+        user.hashed_password = hash_password(new_password)
+        db.commit()
+
+    @staticmethod
+    def _avatar_object_name_from_url(avatar_url: str | None) -> str | None:
+        if not avatar_url:
+            return None
+        prefix = "/api/storage/"
+        if avatar_url.startswith(prefix):
+            return avatar_url[len(prefix) :]
+        return None
+
+    @staticmethod
+    async def upload_avatar(db: Session, user: User, file: UploadFile) -> User:
+        content_type = file.content_type or ""
+        extension = AVATAR_ALLOWED_TYPES.get(content_type)
+        if not extension:
+            raise HTTPException(status_code=400, detail="仅支持 JPG、PNG、WEBP、GIF 格式")
+
+        data = await file.read()
+        if not data:
+            raise HTTPException(status_code=400, detail="上传文件为空")
+        if len(data) > AVATAR_MAX_BYTES:
+            raise HTTPException(status_code=400, detail="头像大小不能超过 2MB")
+
+        object_name = f"avatars/{user.id}/{uuid.uuid4().hex}{extension}"
+        minio_client.upload_bytes(object_name, data, content_type=content_type)
+        avatar_url = minio_client.build_public_url(object_name)
+
+        old_object = UserService._avatar_object_name_from_url(user.avatar)
+        user.avatar = avatar_url
+        db.commit()
+        db.refresh(user)
+
+        if old_object and old_object != object_name:
+            try:
+                minio_client.delete_file(old_object)
+            except Exception:
+                pass
+
+        return user
+
+    @staticmethod
+    def get_role_applications(db: Session, status: str = None) -> list:
+        """获取角色申请列表"""
+        from app.entity.db_models import RoleApplication
+        query = db.query(RoleApplication)
+        if status:
+            query = query.filter(RoleApplication.status == status)
+        return query.order_by(RoleApplication.applied_at.desc()).all()
+
+    @staticmethod
+    def get_user_role_applications(db: Session, user_id: int) -> list:
+        """获取用户的角色申请历史"""
+        from app.entity.db_models import RoleApplication
+        return db.query(RoleApplication).filter(
+            RoleApplication.user_id == user_id
+        ).order_by(RoleApplication.applied_at.desc()).all()
+
+    @staticmethod
+    def approve_role_application(db: Session, application_id: int, approver_id: int, status: str, comment: str = None):
+        """审批角色申请"""
+        from datetime import datetime
+        from fastapi import HTTPException
+        from app.entity.db_models import RoleApplication, UserRole
+        app = db.query(RoleApplication).filter(RoleApplication.id == application_id).first()
+        if not app:
+            raise HTTPException(status_code=404, detail="申请不存在")
+        if app.status != "pending":
+            raise HTTPException(status_code=400, detail="该申请已处理")
+        app.status = status
+        app.approver_id = approver_id
+        app.approve_comment = comment
+        app.approved_at = datetime.now()
+        if status == "approved":
+            existing = db.query(UserRole).filter(
+                UserRole.user_id == app.user_id, UserRole.role_id == app.role_id
+            ).first()
+            if not existing:
+                db.add(UserRole(user_id=app.user_id, role_id=app.role_id))
+            # 审批通过 → 激活账户
+            app.user.is_approved = True
+        db.commit()
+        db.refresh(app)
+        return app
+
+
 user_service = UserService()

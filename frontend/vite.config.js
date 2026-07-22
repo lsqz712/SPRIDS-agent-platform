@@ -1,16 +1,16 @@
-import vue from "@vitejs/plugin-vue";
-import { defineConfig } from "vite";
-import path from "path";
-import { fileURLToPath } from "url";
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
+import { defineConfig } from 'vite'
+import vue from '@vitejs/plugin-vue'
+import path from 'path'
+
 export default defineConfig({
   plugins: [vue()],
+
   resolve: {
     alias: {
-      "@": path.resolve(__dirname, "src"),
-      "/favicon.svg": path.resolve(__dirname, "public", "favicon.svg"),
+      '@': path.resolve(__dirname, 'src'),
     },
   },
+
   css: {
     preprocessorOptions: {
       scss: {
@@ -18,34 +18,36 @@ export default defineConfig({
       },
     },
   },
+
+  optimizeDeps: {
+    include: ['pixi.js', 'pixi-live2d-display/cubism4'],
+    force: true,
+  },
+
   server: {
     port: 5173,
     open: true,
+    hmr: { overlay: false },
     proxy: {
-      "/api": {
-        target: "http://localhost:8001",
+      '/api': {
+        target: 'http://localhost:8000',
         changeOrigin: true,
       },
-      // WebSocket 代理（关键！）
-      "/api/detection/camera": {
-        target: "ws://localhost:8001",
-        ws: true,  // 启用 WebSocket 代理
-        changeOrigin: true,
+      '/api/detection/camera': {
+        target: 'ws://localhost:8000',
+        ws: true,
+        changeOrigin: true
       },
     },
   },
+
   test: {
-    environment: "happy-dom",
-    setupFiles: ["./tests/setup.js"],
-    include: ["tests/**/*.{test,spec}.{js,ts}"],
+    environment: 'happy-dom',
+    setupFiles: ['./tests/setup.js'],
+    include: ['tests/**/*.{test,spec}.{js,ts}'],
     coverage: {
-      provider: "v8",
-      reporter: ["text", "html"],
-    },
-    server: {
-      deps: {
-        inline: ["element-plus"],
-      },
+      provider: 'v8',
+      reporter: ['text', 'html'],
     },
   },
-});
+})
