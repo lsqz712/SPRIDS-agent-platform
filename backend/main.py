@@ -38,7 +38,12 @@ def init_roles_and_permissions():
     try:
         db = next(get_db())
         result = init_service.init_all(db)
-        print(f"角色权限初始化完成: {result['permissions_created']} 个权限, {result['roles_created']} 个角色")
+        perm_count = result.get("permissions_count", 0)
+        role_count = result.get("roles_count", 0)
+        errors = {k: v for k, v in result.items() if k.endswith("_error")}
+        print(f"角色权限初始化完成: {perm_count} 个权限, {role_count} 个角色")
+        if errors:
+            print(f"初始化警告: {errors}")
     except Exception as e:
         print(f"角色权限初始化失败: {e}")
 

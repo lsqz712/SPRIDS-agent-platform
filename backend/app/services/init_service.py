@@ -179,6 +179,7 @@ class InitService:
                 elif count:
                     result[f"{step_name}_count"] = count
             except Exception as e:
+                db.rollback()
                 result[f"{step_name}_error"] = str(e)
 
         return result
@@ -186,20 +187,25 @@ class InitService:
     @staticmethod
     def _fix_existing_users(db: Session) -> dict:
         result = {}
-        # 修复：已审批但 is_approved 未同步的用户
         from sqlalchemy import text as sa_text
-        from app.entity.db_models import RoleApplication as RA
-        approved = db.execute(
-            sa_text("UPDATE users SET is_approved=true WHERE id IN (SELECT user_id FROM role_applications WHERE status='approved') AND (is_approved IS NULL OR is_approved=false)")
-        ).rowcount
-        if approved:
-            db.commit()
-            result["sync_approved"] = approved
 
-        # 确保 schema 存在（兼容未跑 alembic 的环境）
-        from sqlalchemy import text as sa_text
+        # 先确保 schema 存在（兼容未跑 alembic 的环境）
         try:
             db.execute(sa_text("ALTER TABLE users ADD COLUMN IF NOT EXISTS is_approved BOOLEAN DEFAULT true"))
+            db.execute(sa_text("ALTER TABLE users ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP"))
+            db.execute(sa_text("ALTER TABLE roles ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP"))
+            db.execute(sa_text("ALTER TABLE detection_scenes ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP"))
+            db.execute(sa_text("ALTER TABLE model_versions ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP"))
+            db.execute(sa_text("ALTER TABLE model_versions ADD COLUMN IF NOT EXISTS export_format VARCHAR(20)"))
+            db.execute(sa_text("ALTER TABLE training_tasks ADD COLUMN IF NOT EXISTS task_uuid VARCHAR(100)"))
+            db.execute(sa_text("ALTER TABLE training_tasks ADD COLUMN IF NOT EXISTS dataset_version_id INTEGER"))
+            db.execute(sa_text("ALTER TABLE training_tasks ADD COLUMN IF NOT EXISTS data_yaml VARCHAR(500)"))
+            db.execute(sa_text("ALTER TABLE detection_tasks ADD COLUMN IF NOT EXISTS source VARCHAR(20) DEFAULT 'manual'"))
+            db.execute(sa_text("ALTER TABLE detection_tasks ADD COLUMN IF NOT EXISTS analysis_report TEXT"))
+            db.execute(sa_text("ALTER TABLE detection_tasks ADD COLUMN IF NOT EXISTS analysis_suggestion TEXT"))
+            db.execute(sa_text("ALTER TABLE detection_tasks ADD COLUMN IF NOT EXISTS risk_level VARCHAR(20)"))
+            db.execute(sa_text("ALTER TABLE detection_tasks ADD COLUMN IF NOT EXISTS analyzed_at TIMESTAMP"))
+            db.execute(sa_text("ALTER TABLE detection_tasks ADD COLUMN IF NOT EXISTS batch_id INTEGER"))
             db.execute(sa_text("""
                 CREATE TABLE IF NOT EXISTS role_applications (
                     id SERIAL PRIMARY KEY, user_id INT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -211,6 +217,17 @@ class InitService:
             db.execute(sa_text("CREATE INDEX IF NOT EXISTS ix_ra_user_id ON role_applications(user_id)"))
             db.execute(sa_text("CREATE INDEX IF NOT EXISTS ix_ra_role_id ON role_applications(role_id)"))
             db.commit()
+        except Exception:
+            db.rollback()
+
+        # 修复：已审批但 is_approved 未同步的用户
+        try:
+            approved = db.execute(
+                sa_text("UPDATE users SET is_approved=true WHERE id IN (SELECT user_id FROM role_applications WHERE status='approved') AND (is_approved IS NULL OR is_approved=false)")
+            ).rowcount
+            if approved:
+                db.commit()
+                result["sync_approved"] = approved
         except Exception:
             db.rollback()
 

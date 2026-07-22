@@ -211,6 +211,7 @@ class TrainingTaskCreate(ModelFieldBaseModel):
     optimizer: str = Field(default="SGD", description="优化器")
     lr0: float = Field(default=0.01, description="初始学习率")
     augment_config: Optional[dict] = Field(None, description="数据增强配置")
+    data_yaml: Optional[str] = Field(None, description="数据集 data.yaml 路径（可选，为空则自动查找场景关联数据集）")
 class TrainingTaskResponse(ModelFieldBaseModel):
     """训练任务响应"""
     id: int
@@ -226,9 +227,8 @@ class TrainingTaskResponse(ModelFieldBaseModel):
     img_size: int
     batch_size: int
     device: str
-    dataset_size: Optional[int] = None
     error_message: Optional[str] = None
-    created_at: datetime
+    created_at: Optional[datetime] = None
     started_at: Optional[datetime] = None
     completed_at: Optional[datetime] = None
     model_config = {"from_attributes": True}

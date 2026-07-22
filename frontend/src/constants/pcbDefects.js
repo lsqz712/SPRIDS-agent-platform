@@ -48,7 +48,7 @@ export const TASK_STATUS_MAP = {
 
 export const TRAINING_STATUS_MAP = {
   pending: { label: '排队中', type: 'info' },
-  running: { label: '训练中', type: 'warning' },
+  processing: { label: '训练中', type: 'warning' },
   completed: { label: '已完成', type: 'success' },
   failed: { label: '失败', type: 'danger' },
   cancelled: { label: '已取消', type: 'info' },

@@ -333,10 +333,10 @@ export async function mockCreateTraining(config) {
   const task = {
     id,
     user_id: 1,
-    scene_id: PCB_SCENE.id,
+    scene_id: config.scene_id || PCB_SCENE.id,
     scene_name: PCB_SCENE.display_name,
     task_uuid: `train-${Date.now()}`,
-    status: 'running',
+    status: 'processing',
     model_name: config.model_name,
     epochs: config.epochs,
     current_epoch: 0,
@@ -344,7 +344,6 @@ export async function mockCreateTraining(config) {
     img_size: config.img_size,
     batch_size: config.batch_size,
     device: config.device,
-    dataset_size: 1280,
     created_at: new Date().toISOString(),
     started_at: new Date().toISOString(),
     completed_at: null,
@@ -361,7 +360,7 @@ export async function mockPollTraining(taskId) {
   if (idx === -1) throw new Error('训练任务不存在')
 
   const task = store.trainingTasks[idx]
-  if (task.status !== 'running') {
+  if (task.status !== 'processing') {
     return { task, metrics: store.trainingMetrics[taskId] || [] }
   }
 
@@ -388,7 +387,7 @@ export async function mockPollTraining(taskId) {
     ...task,
     current_epoch: nextEpoch,
     progress,
-    status: nextEpoch >= task.epochs ? 'completed' : 'running',
+    status: nextEpoch >= task.epochs ? 'completed' : 'processing',
     completed_at: nextEpoch >= task.epochs ? new Date().toISOString() : null,
   }
   saveStore(store)

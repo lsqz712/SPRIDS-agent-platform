@@ -48,10 +48,10 @@
           <button
             type="button"
             class="phro-btn phro-btn--primary start-btn"
-            :disabled="!!activeTask && activeTask.status === 'running'"
+            :disabled="!!activeTask && activeTask.status === 'processing'"
             @click="startTraining"
           >
-            {{ activeTask?.status === 'running' ? '训练进行中…' : '启动训练' }}
+            {{ activeTask?.status === 'processing' ? '训练进行中…' : '启动训练' }}
           </button>
         </el-form>
       </div>
@@ -138,6 +138,7 @@ import {
   withApiFallback,
 } from '@/services/spridsMock'
 import { createTrainingApi, listTrainingApi, getTrainingMetricsApi, getTrainingStatusApi } from '@/api/training'
+import { PCB_SCENE } from '@/constants/pcbDefects'
 
 const form = ref({
   model_name: 'yolov11n',
@@ -182,7 +183,7 @@ async function loadTasks() {
 async function startTraining() {
   try {
     const task = await withApiFallback(
-      () => createTrainingApi({ scene_id: 1, ...form.value }).then((r) => r?.data || r),
+      () => createTrainingApi({ scene_id: PCB_SCENE.id, ...form.value }).then((r) => r?.data || r),
       () => mockCreateTraining(form.value),
     )
     activeTask.value = task
@@ -222,7 +223,7 @@ function startPolling(taskId) {
     } catch {
       stopPolling()
     }
-  }, 1200)
+  }, 3000)
 }
 
 function stopPolling() {
@@ -238,7 +239,7 @@ async function viewTask(row) {
     () => getTrainingMetricsApi(row.id).then((r) => r?.data || r || []),
     () => mockGetTrainingMetrics(row.id),
   )
-  if (row.status === 'running') startPolling(row.id)
+  if (row.status === 'processing') startPolling(row.id)
   else stopPolling()
 }
 
