@@ -291,6 +291,8 @@
           </div>
 
         <footer class="chat-input-bar">
+          <input ref="fileInputRef" type="file" accept="image/*" style="display:none" @change="handleFileAttach" />
+          <button type="button" class="phro-btn attach-btn" :disabled="isLoading" @click="$refs.fileInputRef.click()" title="附加图片">📎</button>
           <textarea
             ref="inputRef"
             v-model="inputText"
@@ -364,6 +366,24 @@ const emit = defineEmits(['focus', 'dragging-change'])
 
 const windowsStore = useFeixunWindowsStore()
 const userStore = useUserStore()
+
+const pendingFilePath = ref('')
+
+async function handleFileAttach(event) {
+  const file = event.target.files?.[0]
+  if (!file) return
+  try {
+    const fd = new FormData()
+    fd.append('file', file)
+    const res = await request.post('/chat/upload', fd, { headers: { 'Content-Type': 'multipart/form-data' } })
+    const data = res.data || res
+    pendingFilePath.value = data.image_path
+    ElMessage.success(`已附加: ${file.name}`)
+  } catch (e) {
+    ElMessage.error('上传失败: ' + (e.response?.data?.detail || e.message))
+  }
+  event.target.value = ''
+}
 
 function generateSessionId() {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
@@ -1537,12 +1557,14 @@ function handleSend() {
   const chat = chatState()
   if (!chat) return
 
+  const imagePath = pendingFilePath.value
+  pendingFilePath.value = ''
   inputText.value = ''
   nextTick(autoResize)
 
   stickToBottom.value = true
   dismissScrollToBottomBtn()
-  chat.messages.push({ role: 'user', content: text })
+  chat.messages.push({ role: 'user', content: text + (imagePath ? ' [图片]' : '') })
   touchSessionAfterUserSend()
   chat.messages.push({ role: 'assistant', content: '' })
   chat.isLoading = true
@@ -1551,6 +1573,7 @@ function handleSend() {
     '/api/chat/stream',
     {
       message: text,
+      image_path: imagePath || undefined,
       history: buildHistory().slice(0, -2),
     },
     {
