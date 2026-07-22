@@ -35,6 +35,17 @@ jobs:
           username: ${{ secrets.ACR_USERNAME }}
           password: ${{ secrets.ACR_PASSWORD }}
 
+      - name: Pull base image first
+        run: |
+          for attempt in 1 2 3; do
+            echo "Attempt $attempt to pull base image..."
+            if docker pull python:3.11-slim-bookworm; then
+              echo "Base image pulled successfully"
+              break
+            fi
+            sleep 10
+          done
+
       - name: Build & Push backend
         uses: docker/build-push-action@v6
         with:
@@ -45,7 +56,7 @@ jobs:
             ghcr.io/lsqz712/pcb-backend:latest
             ${{ secrets.ACR_REGISTRY }}/pcb-platform/pcb-backend:latest
           build-args: |
-            REGISTRY_PREFIX=registry.cn-hangzhou.aliyuncs.com/library/
+            REGISTRY_PREFIX=
           cache-from: type=registry,ref=ghcr.io/lsqz712/pcb-backend:buildcache
           cache-to: type=registry,ref=ghcr.io/lsqz712/pcb-backend:buildcache,mode=max
           timeout: 300

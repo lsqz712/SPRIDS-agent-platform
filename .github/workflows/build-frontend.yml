@@ -27,6 +27,25 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Pull base images first
+        run: |
+          for attempt in 1 2 3; do
+            echo "Attempt $attempt to pull node:20-alpine..."
+            if docker pull node:20-alpine; then
+              echo "node:20-alpine pulled successfully"
+              break
+            fi
+            sleep 10
+          done
+          for attempt in 1 2 3; do
+            echo "Attempt $attempt to pull nginx:alpine..."
+            if docker pull nginx:alpine; then
+              echo "nginx:alpine pulled successfully"
+              break
+            fi
+            sleep 10
+          done
+
       - name: Build and push frontend
         uses: docker/build-push-action@v6
         with:
@@ -35,6 +54,6 @@ jobs:
           push: true
           tags: ghcr.io/lsqz712/pcb-frontend:latest
           build-args: |
-            REGISTRY_PREFIX=registry.cn-hangzhou.aliyuncs.com/library/
+            REGISTRY_PREFIX=
           timeout: 300
           retries: 3
