@@ -16,12 +16,16 @@ class HistoryService:
         db: Session,
         page: int = 1,
         page_size: int = 20,
+        user_id: int = None,
         keyword: str = "",
         task_type: str = "",
         status: str = "",
     ) -> tuple[list[DetectionTask], int]:
         """获取历史检测记录列表（分页 + 筛选）"""
         query = db.query(DetectionTask).options(joinedload(DetectionTask.scene))
+
+        if user_id:
+            query = query.filter(DetectionTask.user_id == user_id)
 
         if keyword:
             try:
