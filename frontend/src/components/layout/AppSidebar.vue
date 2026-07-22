@@ -122,6 +122,7 @@ const allMenuItems = [
   { path: '/history', title: '历史记录', icon: Clock, roles: ['admin', 'operator'] },
   { path: '/batches', title: '批次管理', icon: Box, roles: ['admin', 'operator'] },
   { path: '/defect-types', title: '缺陷类型', icon: CollectionTag, roles: ['admin', 'engineer'] },
+  { path: '/role-approvals', title: '角色审批', icon: CollectionTag, roles: ['admin'] },
 ]
 
 const navMenuItems = computed(() => {

@@ -138,7 +138,9 @@ import {
   withApiFallback,
 } from '@/services/spridsMock'
 import { createTrainingApi, listTrainingApi, getTrainingMetricsApi, getTrainingStatusApi } from '@/api/training'
-import { PCB_SCENE } from '@/constants/pcbDefects'
+import { getScenesApi } from '@/api/detection'
+
+const pcbSceneId = ref(null)
 
 const form = ref({
   model_name: 'yolov11n',
@@ -183,7 +185,7 @@ async function loadTasks() {
 async function startTraining() {
   try {
     const task = await withApiFallback(
-      () => createTrainingApi({ scene_id: PCB_SCENE.id, ...form.value }).then((r) => r?.data || r),
+      () => createTrainingApi({ scene_id: pcbSceneId.value, ...form.value }).then((r) => r?.data || r),
       () => mockCreateTraining(form.value),
     )
     activeTask.value = task
@@ -243,7 +245,19 @@ async function viewTask(row) {
   else stopPolling()
 }
 
-onMounted(loadTasks)
+async function loadPcbSceneId() {
+  try {
+    const res = await getScenesApi()
+    const list = res?.data || res || []
+    const pcb = list.find(s => s.name === 'pcb_smt')
+    if (pcb) pcbSceneId.value = pcb.id
+  } catch { /* use fallback */ }
+}
+
+onMounted(async () => {
+  await loadPcbSceneId()
+  loadTasks()
+})
 onBeforeUnmount(stopPolling)
 </script>
 

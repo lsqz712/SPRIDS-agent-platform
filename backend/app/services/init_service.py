@@ -191,6 +191,11 @@ class InitService:
 
         # 先确保 schema 存在（兼容未跑 alembic 的环境）
         try:
+            # 补建缺失的表（SQLAlchemy create_all 自动跳过已存在的）
+            from app.database.session import Base
+            Base.metadata.create_all(bind=db.get_bind())
+
+            # 补缺失的列（SQLAlchemy 不会自动加列，需手动处理）
             db.execute(sa_text("ALTER TABLE users ADD COLUMN IF NOT EXISTS is_approved BOOLEAN DEFAULT true"))
             db.execute(sa_text("ALTER TABLE users ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP"))
             db.execute(sa_text("ALTER TABLE roles ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP"))
@@ -206,16 +211,9 @@ class InitService:
             db.execute(sa_text("ALTER TABLE detection_tasks ADD COLUMN IF NOT EXISTS risk_level VARCHAR(20)"))
             db.execute(sa_text("ALTER TABLE detection_tasks ADD COLUMN IF NOT EXISTS analyzed_at TIMESTAMP"))
             db.execute(sa_text("ALTER TABLE detection_tasks ADD COLUMN IF NOT EXISTS batch_id INTEGER"))
-            db.execute(sa_text("""
-                CREATE TABLE IF NOT EXISTS role_applications (
-                    id SERIAL PRIMARY KEY, user_id INT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-                    role_id INT NOT NULL REFERENCES roles(id) ON DELETE CASCADE,
-                    status VARCHAR(20) DEFAULT 'pending', approver_id INT REFERENCES users(id) ON DELETE SET NULL,
-                    approve_comment VARCHAR(500), applied_at TIMESTAMP DEFAULT NOW(), approved_at TIMESTAMP
-                )
-            """))
-            db.execute(sa_text("CREATE INDEX IF NOT EXISTS ix_ra_user_id ON role_applications(user_id)"))
-            db.execute(sa_text("CREATE INDEX IF NOT EXISTS ix_ra_role_id ON role_applications(role_id)"))
+            db.execute(sa_text("ALTER TABLE defect_types ADD COLUMN IF NOT EXISTS name_cn VARCHAR(100)"))
+            db.execute(sa_text("ALTER TABLE defect_types ADD COLUMN IF NOT EXISTS severity VARCHAR(20) DEFAULT 'major'"))
+            db.execute(sa_text("ALTER TABLE defect_types ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT true"))
             db.commit()
         except Exception:
             db.rollback()
