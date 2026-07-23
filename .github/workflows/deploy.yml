@@ -89,8 +89,6 @@ jobs:
             echo "Images pulled successfully"
 
             echo "=== Step 3: Start services ==="
-            docker compose -f docker-compose.server.yml down --remove-orphans || true
-            sleep 5
             if ! docker compose -f docker-compose.server.yml up -d; then
               echo "ERROR: Failed to start services"
               exit 1
