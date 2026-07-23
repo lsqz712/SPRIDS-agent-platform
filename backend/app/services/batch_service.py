@@ -260,7 +260,15 @@ class BatchService:
     @staticmethod
     def get_batch_statistics(db: Session, batch: PCBBatch) -> dict:
         """获取批次良品率统计（优先使用批次自身存储的统计值）"""
-        from app.entity.db_models import DetectionTask
+        from app.entity.db_models import DetectionTask, DetectionResult
+
+        def _count_defects():
+            return (
+                db.query(DetectionResult)
+                .join(DetectionTask, DetectionResult.task_id == DetectionTask.id)
+                .filter(DetectionTask.batch_id == batch.id)
+                .count()
+            )
 
         # 如果批次已有统计数据且状态为 completed，直接使用
         if batch.status == "completed" and batch.inspected_count > 0:
@@ -269,6 +277,7 @@ class BatchService:
                 "inspected_count": batch.inspected_count,
                 "pass_count": batch.pass_count,
                 "fail_count": batch.fail_count,
+                "total_defects": _count_defects(),
                 "pass_rate": batch.pass_rate,
                 "fail_rate": round(1 - batch.pass_rate, 4) if batch.pass_rate else 0,
                 "remaining_count": batch.total_count - batch.inspected_count,
@@ -300,6 +309,7 @@ class BatchService:
             "inspected_count": inspected_count,
             "pass_count": pass_count,
             "fail_count": fail_count,
+            "total_defects": _count_defects(),
             "pass_rate": pass_rate,
             "fail_rate": round(1 - pass_rate, 4) if inspected_count > 0 else 0,
             "remaining_count": batch.total_count - inspected_count,

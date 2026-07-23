@@ -204,8 +204,8 @@
               <div class="stat-label">良品</div>
             </div>
             <div class="stat-card">
-              <div class="stat-value danger">{{ selectedBatch.fail_count }}</div>
-              <div class="stat-label">问题数</div>
+              <div class="stat-value danger">{{ selectedBatch.total_defects ?? selectedBatch.fail_count }}</div>
+              <div class="stat-label">缺陷总数</div>
             </div>
             <div class="stat-card pass-rate-card" :class="{ warning: selectedBatch.pass_rate < 90 }">
               <div class="stat-value">{{ (selectedBatch.pass_rate * 100).toFixed(1) }}%</div>
