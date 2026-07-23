@@ -68,6 +68,7 @@ jobs:
           username: ${{ secrets.SERVER_USERNAME }}
           port: ${{ secrets.SERVER_PORT }}
           password: ${{ secrets.SERVER_PASSWORD }}
+          command_timeout: 900s
           envs: ACR_USER,ACR_PWD,ACR_REG
           script: |
             set -e

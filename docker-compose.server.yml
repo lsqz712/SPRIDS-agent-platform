@@ -9,8 +9,7 @@ services:
     ports:
       - "80:80"
     depends_on:
-      backend:
-        condition: service_healthy
+      - backend
     networks:
       pcb-net:
     healthcheck:
@@ -43,9 +42,9 @@ services:
       pcb-net:
     healthcheck:
       test: ["CMD-SHELL", "curl -f http://localhost:8000/api/health || exit 1"]
-      interval: 30s
+      interval: 10s
       timeout: 30s
-      retries: 20
+      retries: 10
       start_period: 120s
 
   # PostgreSQL 数据库
