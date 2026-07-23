@@ -119,7 +119,7 @@ jobs:
           script: |
             echo "=== Verifying deployment ==="
             sleep 10
-            
+
             echo "Checking frontend..."
             if curl -f http://localhost:80/ > /dev/null 2>&1; then
               echo "Frontend is running"
@@ -127,12 +127,14 @@ jobs:
               echo "WARNING: Frontend not responding"
             fi
 
+            echo "Backend may still be starting up (model loading takes ~2min)"
             echo "Checking backend health..."
             if curl -f http://localhost:8000/api/health > /dev/null 2>&1; then
               echo "Backend is running"
             else
-              echo "WARNING: Backend not responding"
+              echo "WARNING: Backend not responding yet (may still be loading)"
             fi
 
             echo "=== Container status ==="
+            cd /opt/pcb-web-platform
             docker compose -f docker-compose.server.yml ps
