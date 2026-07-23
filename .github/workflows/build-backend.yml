@@ -59,5 +59,3 @@ jobs:
             REGISTRY_PREFIX=
           cache-from: type=registry,ref=ghcr.io/lsqz712/pcb-backend:buildcache
           cache-to: type=registry,ref=ghcr.io/lsqz712/pcb-backend:buildcache,mode=max
-          timeout: 300
-          retries: 3

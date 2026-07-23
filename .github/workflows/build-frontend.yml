@@ -55,5 +55,3 @@ jobs:
           tags: ghcr.io/lsqz712/pcb-frontend:latest
           build-args: |
             REGISTRY_PREFIX=
-          timeout: 300
-          retries: 3
