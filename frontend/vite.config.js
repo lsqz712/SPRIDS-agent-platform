@@ -32,6 +32,7 @@ export default defineConfig({
       '/api': {
         target: 'http://localhost:8000',
         changeOrigin: true,
+        ws: true,
       },
       '/api/detection/camera': {
         target: 'ws://localhost:8000',

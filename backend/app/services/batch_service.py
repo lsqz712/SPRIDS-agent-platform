@@ -239,64 +239,86 @@ class BatchService:
 
     @staticmethod
     def get_batch_statistics(db: Session, batch: PCBBatch) -> dict:
-        """获取批次良品率统计"""
-        from app.entity.db_models import DetectionResult
+        """获取批次良品率统计（优先使用批次自身存储的统计值）"""
+        from app.entity.db_models import DetectionTask
 
-        # 最新完成的检测任务
-        latest_task = db.query(DetectionTask).filter(
+        # 如果批次已有统计数据且状态为 completed，直接使用
+        if batch.status == "completed" and batch.inspected_count > 0:
+            return {
+                "total_count": batch.total_count,
+                "inspected_count": batch.inspected_count,
+                "pass_count": batch.pass_count,
+                "fail_count": batch.fail_count,
+                "pass_rate": batch.pass_rate,
+                "fail_rate": round(1 - batch.pass_rate, 4) if batch.pass_rate else 0,
+                "remaining_count": batch.total_count - batch.inspected_count,
+            }
+
+        # 否则重算（基于检测任务统计）
+        inspected_tasks = db.query(DetectionTask).filter(
             DetectionTask.batch_id == batch.id,
-            DetectionTask.status == "completed",
-        ).order_by(DetectionTask.id.desc()).first()
+            DetectionTask.status == "COMPLETED",
+        ).all()
+        inspected_count = sum(t.total_images for t in inspected_tasks)
 
-        inspected_tasks = 1 if latest_task else 0
-        fail_count = (
-            db.query(DetectionResult).filter(
-                DetectionResult.task_id == latest_task.id
-            ).count() if latest_task else 0
-        )
+        pass_count = batch.pass_count
+        fail_count = batch.fail_count
 
-        # pass_count = 无缺陷图片数（无法精确计算，设为0当有缺陷时）
-        pass_count = 0 if fail_count > 0 else (batch.inspected_count or inspected_tasks)
-        pass_rate = round(pass_count / max(batch.inspected_count or inspected_tasks, 1), 4)
+        if not pass_count and not fail_count:
+            from app.entity.db_models import BatchImage as BI
+            pass_count = db.query(BI).filter(
+                BI.batch_id == batch.id, BI.status == "pass"
+            ).count()
+            fail_count = db.query(BI).filter(
+                BI.batch_id == batch.id, BI.status == "fail"
+            ).count()
+
+        pass_rate = round(pass_count / max(inspected_count, 1), 4) if inspected_count > 0 else 0
 
         return {
             "total_count": batch.total_count,
-            "inspected_count": inspected_tasks,
+            "inspected_count": inspected_count,
             "pass_count": pass_count,
             "fail_count": fail_count,
             "pass_rate": pass_rate,
-            "fail_rate": round(1 - pass_rate, 4) if inspected_tasks > 0 else 0,
-            "remaining_count": batch.total_count - inspected_tasks,
+            "fail_rate": round(1 - pass_rate, 4) if inspected_count > 0 else 0,
+            "remaining_count": batch.total_count - inspected_count,
         }
 
     @staticmethod
     def detect_batch(db: Session, batch_id: int, conf: float, scene_id: int, user_id: int) -> dict:
         """批次一键检测"""
+        import tempfile
+
         batch = BatchService.get_batch_by_id(db=db, batch_id=batch_id)
 
         images = db.query(BatchImage).filter(
             BatchImage.batch_id == batch_id,
-            BatchImage.status == "pending",
+            BatchImage.status.in_(["pending", "detected"]),
         ).all()
 
         if not images:
             raise HTTPException(status_code=400, detail="批次中没有待检测的图片")
 
-        image_paths = []
+        # 建立临时文件路径到 BatchImage 的映射
+        path_to_image = {}
         for img in images:
             try:
                 obj = minio_client.get_object_stream(img.image_path)
                 if obj:
-                    import tempfile
-                    with tempfile.NamedTemporaryFile(suffix=os.path.splitext(img.filename)[1], delete=False) as tmp:
-                        tmp.write(obj.read())
-                        obj.close()
-                        image_paths.append(tmp.name)
+                    suffix = os.path.splitext(img.filename)[1] or ".jpg"
+                    tmp = tempfile.NamedTemporaryFile(suffix=suffix, delete=False)
+                    tmp.write(obj.read())
+                    obj.close()
+                    tmp.close()
+                    path_to_image[tmp.name] = img
             except Exception:
                 pass
 
-        if not image_paths:
+        if not path_to_image:
             raise HTTPException(status_code=400, detail="无法获取批次图片")
+
+        image_paths = list(path_to_image.keys())
 
         result = detection_service.detect_batch(
             image_paths=image_paths,
@@ -305,53 +327,69 @@ class BatchService:
             user_id=user_id,
         )
 
+        # 清理临时文件
         for path in image_paths:
             try:
                 os.unlink(path)
             except Exception:
                 pass
 
+        # 关联 DetectionTask 到批次，并替换临时路径为 MinIO 路径
         task_id = result.get("task_id")
         if task_id:
             task = db.query(DetectionTask).filter(DetectionTask.id == task_id).first()
             if task:
                 task.batch_id = batch_id
                 db.commit()
-                # 将检测结果的临时路径替换为批次图片文件名（按顺序匹配）
                 from app.entity.db_models import DetectionResult
                 det_results = db.query(DetectionResult).filter(
                     DetectionResult.task_id == task_id
                 ).order_by(DetectionResult.id).all()
-                # 按 image_path 分组，每组对应一张批次图片
                 temp_paths_seen = []
-                path_idx = 0
                 for dr in det_results:
                     if dr.image_path not in temp_paths_seen:
                         temp_paths_seen.append(dr.image_path)
-                        path_idx = len(temp_paths_seen) - 1
-                    else:
-                        path_idx = temp_paths_seen.index(dr.image_path)
-                    if path_idx < len(images):
-                        dr.image_path = images[path_idx].image_path  # 替换为 MinIO 路径
+                    path_idx = temp_paths_seen.index(dr.image_path)
+                    batch_img = images[path_idx] if path_idx < len(images) else None
+                    if batch_img:
+                        dr.image_path = batch_img.image_path
                 db.commit()
 
-        batch.status = "in_progress"
+        # 根据检测结果更新每张 BatchImage 的状态
+        batch_results = result.get("results", [])
+        pass_count = 0
+        fail_count = 0
+        for r in batch_results:
+            img_path = r.get("image_path", "")
+            batch_img = path_to_image.get(img_path)
+            if batch_img:
+                has_defects = len(r.get("defects", [])) > 0
+                if has_defects:
+                    batch_img.status = "fail"
+                    fail_count += 1
+                else:
+                    batch_img.status = "pass"
+                    pass_count += 1
+
+        # 更新批次统计（累加而非覆盖）
+        batch.inspected_count = (batch.inspected_count or 0) + len(images)
+        batch.pass_count = (batch.pass_count or 0) + pass_count
+        batch.fail_count = (batch.fail_count or 0) + fail_count
+        total_inspected = batch.inspected_count
+        batch.pass_rate = round(batch.pass_count / max(total_inspected, 1), 4)
+        batch.status = "completed"
         db.commit()
         db.refresh(batch)
-
-        # 检测完成后更新批次状态
-        if result and not result.get("error"):
-            batch.status = "completed"
-            batch.inspected_count = result.get("total_images", len(images))
-            db.commit()
 
         return {
             "batch_id": batch.id,
             "batch_no": batch.batch_no,
             "task_id": task_id,
             "total_images": len(images),
-            "status": "detection_started",
-            **result,
+            "pass_count": pass_count,
+            "fail_count": fail_count,
+            "pass_rate": batch.pass_rate,
+            "status": "completed",
         }
 
 

@@ -116,6 +116,9 @@
               </button>
             </div>
             <div v-if="cameraRunning" class="cam-status-tags">
+              <el-tag :type="wsStatus === 'streaming' ? 'success' : 'warning'" size="small">
+                {{ wsStatus === 'idle' ? '未连接' : wsStatus === 'connected' ? '模型加载中...' : wsStatus === 'streaming' ? '检测中' : wsStatus === 'timeout' ? '加载超时' : wsStatus === 'error' ? '连接失败' : wsStatus }}
+              </el-tag>
               <el-tag type="success" size="small">FPS: {{ cameraFps }}</el-tag>
               <el-tag type="info" size="small">帧: {{ camFrameCount }}</el-tag>
               <el-tag type="info" size="small">推理: {{ camInferenceTime }}ms</el-tag>
@@ -128,7 +131,7 @@
       <section v-if="mode === 'camera'" class="detection-main camera-layout">
         <div class="camera-preview-panel">
           <div class="camera-video-wrapper">
-            <video ref="videoRef" autoplay playsinline muted />
+            <video ref="videoRef" autoplay playsinline muted class="camera-hidden-video" />
             <canvas ref="cameraCanvasRef" class="camera-canvas" />
             <div v-if="!cameraRunning" class="camera-placeholder">点击左侧按钮开启摄像头</div>
           </div>
@@ -407,11 +410,16 @@ const camInferenceTime = ref(0)
 const camObjectCount = ref(0)
 const camDetections = ref([])
 const camSnapshots = ref([])
+const wsStatus = ref('idle') // idle | connected | streaming | disconnected | error | timeout
 let cameraWs = null
 let mediaStream = null
 
 function sendCameraFrame() {
-  if (!cameraWs || !cameraWs.isConnected || !videoRef.value || videoRef.value.readyState < 2) return
+  if (!cameraWs || !cameraWs.isConnected || !videoRef.value) return
+  if (videoRef.value.readyState < 2) {
+    requestAnimationFrame(sendCameraFrame)
+    return
+  }
   const c = document.createElement('canvas')
   c.width = 416; c.height = 416
   const ctx = c.getContext('2d')
@@ -426,6 +434,10 @@ async function startCamera() {
     mediaStream = await navigator.mediaDevices.getUserMedia({ video: { width: { ideal: 640 }, height: { ideal: 480 }, facingMode: 'user' }, audio: false })
     videoRef.value.srcObject = mediaStream
     await videoRef.value.play()
+    // 等待视频解码出第一帧后再建连，确保 sendCameraFrame 能抓到画面
+    if (videoRef.value.readyState < 2) {
+      await new Promise((resolve) => { videoRef.value.oncanplay = resolve })
+    }
     cameraRunning.value = true
     cameraWs = createCameraWs({
       mode: detectMode.value, conf: params.value.confThreshold, iou: params.value.iouThreshold,
@@ -454,8 +466,9 @@ async function startCamera() {
           camSnapshots.value.push(d.annotatedFrame)
         }
       },
+      onStatusChange: (s) => { wsStatus.value = s },
       onConfigOk: () => { requestAnimationFrame(sendCameraFrame) },
-      onError: (m) => { ElMessage.error(m) },
+      onError: (m) => { ElMessage.error(m); wsStatus.value = 'error' },
       onClose: () => {},
     })
     cameraWs.connect()
@@ -470,6 +483,7 @@ function stopCamera() {
   if (cameraWs) { cameraWs.close(); cameraWs = null }
   if (mediaStream) { mediaStream.getTracks().forEach(t => t.stop()); mediaStream = null }
   cameraRunning.value = false
+  wsStatus.value = 'idle'
   cameraFps.value = 0
   camFrameCount.value = 0
   camInferenceTime.value = 0
@@ -686,6 +700,14 @@ onBeforeUnmount(() => { stopCamera() })
   align-items: center;
   justify-content: center;
   min-height: 400px;
+}
+
+.camera-hidden-video {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
 }
 
 .camera-canvas {

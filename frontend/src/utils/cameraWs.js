@@ -26,6 +26,8 @@ class CameraWs {
     this.ws = null;
     this.isConnected = false;
     this._closing = false;
+    this._configOk = false;
+    this._configTimer = null;
 
     this.mode = options.mode || 'cpu';
     this.conf = options.conf || 0.25;
@@ -36,6 +38,7 @@ class CameraWs {
     this.onConfigOk = options.onConfigOk || (() => {});
     this.onError = options.onError || (() => {});
     this.onClose = options.onClose || (() => {});
+    this.onStatusChange = options.onStatusChange || (() => {});
   }
 
   /** 建立 WebSocket 连接 */
@@ -54,11 +57,19 @@ class CameraWs {
 
     this.ws.onopen = () => {
       this.isConnected = true;
-      console.log('[CameraWs] 连接已建立');
+      console.log('[CameraWs] 连接已建立，发送配置...');
+      this.onStatusChange('connected');
       this.ws.send(JSON.stringify({
         type: 'config', mode: this.mode, conf: this.conf,
         iou: this.iou, scene_id: this.sceneId,
       }));
+      // 超时检测：30 秒内没收到 config_ok 则报错
+      this._configTimer = setTimeout(() => {
+        if (!this._configOk) {
+          this.onError('模型加载超时，请检查后端是否正常运行');
+          this.onStatusChange('timeout');
+        }
+      }, 30000);
     };
 
     this.ws.onmessage = (event) => {
@@ -71,15 +82,19 @@ class CameraWs {
       }
     };
 
-    this.ws.onclose = () => {
+    this.ws.onclose = (event) => {
       this.isConnected = false;
       this.ws = null;
-      console.log('[CameraWs] 连接已关闭');
+      console.log('[CameraWs] 连接已关闭, code:', event.code);
+      if (this._configTimer) clearTimeout(this._configTimer);
+      this.onStatusChange('disconnected');
       this.onClose();
     };
 
     this.ws.onerror = (err) => {
       console.error('[CameraWs] 连接错误:', err);
+      if (this._configTimer) clearTimeout(this._configTimer);
+      this.onStatusChange('error');
       this.onError('WebSocket 连接失败，请检查后端服务');
     };
   }
@@ -130,6 +145,9 @@ class CameraWs {
         break;
       case 'config_ok':
         console.log('[CameraWs] 配置确认:', data.message);
+        this._configOk = true;
+        if (this._configTimer) { clearTimeout(this._configTimer); this._configTimer = null; }
+        this.onStatusChange('streaming');
         this.onConfigOk(data);
         break;
       case 'close_ok':
