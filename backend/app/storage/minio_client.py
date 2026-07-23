@@ -37,7 +37,7 @@ class MinIOClient:
             print(f"MinIO 连接失败，将使用本地存储: {e}")
 
     def upload_file(self, object_name: str, file_path: str) -> str:
-        """上传本地文件到 MinIO，返回预签名 URL"""
+        """上传本地文件到 MinIO，返回公开访问 URL（通过后端代理）"""
         if not self.available or not self.client:
             return f"/api/storage/{object_name}"
         self.client.fput_object(
@@ -45,12 +45,12 @@ class MinIOClient:
             object_name=object_name,
             file_path=file_path,
         )
-        return self.get_presigned_url(object_name)
+        return self.build_public_url(object_name)
 
     def upload_bytes(
         self, object_name: str, data: bytes, content_type: str = "image/jpeg"
     ) -> str:
-        """上传字节数据到 MinIO，返回预签名 URL"""
+        """上传字节数据到 MinIO，返回公开访问 URL（通过后端代理）"""
         if not self.available or not self.client:
             return f"/api/storage/{object_name}"
         self.client.put_object(
@@ -60,7 +60,7 @@ class MinIOClient:
             length=len(data),
             content_type=content_type,
         )
-        return self.get_presigned_url(object_name)
+        return self.build_public_url(object_name)
 
     def get_presigned_url(self, object_name: str) -> str:
         """获取对象的预签名访问 URL（有效期 7 天）"""
