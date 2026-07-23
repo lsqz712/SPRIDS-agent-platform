@@ -1,24 +1,5 @@
 /**
  * cameraWs.js — 摄像头实时检测 WebSocket 工具
- *
- * 封装 WebSocket 连接、帧发送、结果处理等逻辑，
- * 对外提供简洁的 API，让组件专注于页面渲染。
- *
- * 使用方式：
- *   import { createCameraWs } from '@/utils/cameraWs';
- *
- *   const ws = createCameraWs({
- *     mode: 'cpu',
- *     conf: 0.25,
- *     onResult: (data) => { ... },
- *     onConfigOk: () => { ... },
- *     onError: (msg) => { ... },
- *     onClose: () => { ... },
- *   });
- *
- *   ws.connect();
- *   ws.sendFrame(base64Data);
- *   ws.close();
  */
 
 class CameraWs {
@@ -26,6 +7,7 @@ class CameraWs {
     this.ws = null;
     this.isConnected = false;
     this._closing = false;
+    this._configTimer = null;
 
     this.mode = options.mode || 'cpu';
     this.conf = options.conf || 0.25;
@@ -36,9 +18,9 @@ class CameraWs {
     this.onConfigOk = options.onConfigOk || (() => {});
     this.onError = options.onError || (() => {});
     this.onClose = options.onClose || (() => {});
+    this.onStatusChange = options.onStatusChange || (() => {});
   }
 
-  /** 建立 WebSocket 连接 */
   connect() {
     if (this.ws && this.ws.readyState === WebSocket.OPEN) {
       console.warn('[CameraWs] 已存在活跃连接');
@@ -50,21 +32,31 @@ class CameraWs {
     const token = localStorage.getItem('SPRIDS_token') || localStorage.getItem('rsod_token') || '';
     const wsUrl = `${protocol}//${host}/api/detection/camera?token=${token}`;
 
+    console.log('[CameraWs] 正在连接:', wsUrl.replace(token, '***'));
+    this.onStatusChange('connecting');
     this.ws = new WebSocket(wsUrl);
 
     this.ws.onopen = () => {
       this.isConnected = true;
-      console.log('[CameraWs] 连接已建立');
+      console.log('[CameraWs] 连接已建立，发送配置...');
       this.ws.send(JSON.stringify({
         type: 'config', mode: this.mode, conf: this.conf,
         iou: this.iou, scene_id: this.sceneId,
       }));
+      this.onStatusChange('loading');
+      // 30秒超时检测
+      this._configTimer = setTimeout(() => {
+        console.error('[CameraWs] config_ok 超时（30秒未响应），后端可能未启动或模型加载失败');
+        this.onStatusChange('timeout');
+        this.onError('模型加载超时，请检查后端服务');
+      }, 30000);
     };
 
     this.ws.onmessage = (event) => {
       if (this._closing) return;
       try {
         const data = JSON.parse(event.data);
+        console.log('[CameraWs] 收到消息:', data.type);
         this._handleMessage(data);
       } catch (err) {
         console.error('[CameraWs] 消息解析失败:', err);
@@ -74,7 +66,9 @@ class CameraWs {
     this.ws.onclose = () => {
       this.isConnected = false;
       this.ws = null;
+      if (this._configTimer) { clearTimeout(this._configTimer); this._configTimer = null; }
       console.log('[CameraWs] 连接已关闭');
+      this.onStatusChange('disconnected');
       this.onClose();
     };
 
@@ -84,7 +78,6 @@ class CameraWs {
     };
   }
 
-  /** 发送一帧数据 */
   sendFrame(base64Data) {
     if (this._closing) return false;
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
@@ -96,9 +89,9 @@ class CameraWs {
     return true;
   }
 
-  /** 关闭连接 */
   close() {
     this._closing = true;
+    if (this._configTimer) { clearTimeout(this._configTimer); this._configTimer = null; }
     if (this.ws && this.ws.readyState === WebSocket.OPEN) {
       try { this.ws.send(JSON.stringify({ type: 'close' })); } catch {}
       setTimeout(() => {
@@ -107,7 +100,6 @@ class CameraWs {
     }
   }
 
-  /** 更新配置（无需重连） */
   updateConfig(config) {
     this.mode = config.mode || this.mode;
     this.conf = config.conf || this.conf;
@@ -115,7 +107,6 @@ class CameraWs {
     this.sceneId = config.sceneId;
   }
 
-  /** 处理后端消息 */
   _handleMessage(data) {
     switch (data.type) {
       case 'result':
@@ -129,7 +120,9 @@ class CameraWs {
         });
         break;
       case 'config_ok':
+        if (this._configTimer) { clearTimeout(this._configTimer); this._configTimer = null; }
         console.log('[CameraWs] 配置确认:', data.message);
+        this.onStatusChange('detecting');
         this.onConfigOk(data);
         break;
       case 'close_ok':
