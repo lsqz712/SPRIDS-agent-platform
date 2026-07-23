@@ -195,8 +195,27 @@ class BatchService:
 
     @staticmethod
     def get_batch_images(db: Session, batch_id: int) -> list:
-        """获取批次图片列表"""
+        """获取批次图片列表（含检测结果）"""
+        from app.entity.db_models import DetectionTask, DetectionResult
+
         images = db.query(BatchImage).filter(BatchImage.batch_id == batch_id).all()
+
+        # 收集该批次所有检测结果，按 image_path 分组
+        det_results = (
+            db.query(DetectionResult)
+            .join(DetectionTask, DetectionResult.task_id == DetectionTask.id)
+            .filter(DetectionTask.batch_id == batch_id)
+            .all()
+        )
+        det_by_path = {}
+        for dr in det_results:
+            det_by_path.setdefault(dr.image_path, []).append({
+                "class_name": dr.class_name,
+                "class_name_cn": dr.class_name_cn,
+                "confidence": dr.confidence,
+                "bbox": dr.bbox,
+            })
+
         return [
             {
                 "id": img.id,
@@ -207,6 +226,7 @@ class BatchService:
                 "image_width": img.image_width,
                 "image_height": img.image_height,
                 "status": img.status,
+                "detections": det_by_path.get(img.image_path, []),
                 "created_at": img.created_at.isoformat() if img.created_at else None,
             }
             for img in images

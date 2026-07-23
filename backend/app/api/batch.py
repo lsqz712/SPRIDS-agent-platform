@@ -104,24 +104,6 @@ async def get_batch(
     statistics = batch_service.get_batch_statistics(db=db, batch=batch)
     images = batch_service.get_batch_images(db=db, batch_id=batch_id)
 
-    # 每张图片的检测结果（按 image_path 匹配）
-    from app.entity.db_models import DetectionResult, DetectionTask
-    latest_task = db.query(DetectionTask).filter(
-        DetectionTask.batch_id == batch_id
-    ).order_by(DetectionTask.id.desc()).first()
-    all_dets = db.query(DetectionResult).filter(
-        DetectionResult.task_id == latest_task.id
-    ).all() if latest_task else []
-
-    # 按批次图片路径分组检测结果
-    for img in images:
-        img_path = img.get("image_path", "")
-        img["detections"] = [
-            {"class_name": d.class_name, "class_name_cn": d.class_name_cn,
-             "confidence": d.confidence, "bbox": d.bbox}
-            for d in all_dets if d.image_path == img_path
-        ]
-
     batch_data = BatchResponse.model_validate(batch).model_dump()
     batch_data.update(statistics)
     batch_data["images"] = images
